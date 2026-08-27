@@ -22,11 +22,21 @@
 
 ## 协议契约
 
-计划使用 OpenAI 兼容 Chat Completions 的原生 `tools/tool_calls` 协议，并显式发送 `n=1`。API 根地址语义、最终请求路径、模型 ID、输出上限参数、usage 可用性及供应商扩展字段尚待 P0 真实探针确认；确认前不把候选值写成实现事实。
+2026-08-27 的 P0 真实探针已确认以下契约：
+
+- API 根地址为 `https://api.moonshot.cn/v1`，客户端固定拼接得到 `https://api.moonshot.cn/v1/chat/completions`。
+- 模型 ID 为 `kimi-k3`；[Kimi 开放平台官网](https://platform.kimi.com/)在 2026-08-27 标明其上下文窗口为 1M tokens。该数值来自供应商文档，不由探针请求反推；后续仍允许用户通过配置采用更保守的限制。
+- 使用 OpenAI 兼容 Chat Completions 原生 `tools/tool_calls`，所有请求显式发送 `n=1`；输出上限字段为 `max_tokens`。短文本请求设置 `max_tokens=8` 时 HTTP 200、`completion_tokens=8`、`finish_reason=length`，证明请求上限被接受并生效。
+- `kimi-k3` 默认 thinking 模式拒绝命名工具选择，返回 `400 invalid_request_error`，说明 `tool_choice 'specified' is incompatible with thinking enabled`。探针显式发送 `thinking={"type":"disabled"}` 后，命名 `tool_choice={"type":"function","function":{"name":"return_probe_token"}}` 成功返回指定原生工具调用；使用原 `tool_call_id` 回传工具结果后，模型以 `finish_reason=stop` 继续生成。
+- 三次成功响应均包含 usage。响应顶层包含 `id/model/choices/usage` 等字段；HTTP 响应未提供 `x-request-id`，因此以响应体 `id` 作为内部请求证据，但不把它回放进 `messages`。
+
+脱敏后的最小真实样本位于 `tests/fixtures/provider_tool_call.json`。探针只记录结构摘要、状态和字段名，不记录 Authorization、API Key、完整 content、reasoning 或原始响应。
 
 ## 消息回放边界
 
-计划将下一轮可回放的 assistant 消息与 `finish_reason`、usage、request ID 等内部响应元数据分离。回放白名单必须由 P0 证据锁定，未知响应字段不得原样透传。该部分尚未实现。
+P0 的基础工具链显式关闭 thinking。该模式下工具调用 assistant 消息只包含 `role/content/tool_calls`，因此当前供应商扩展回放白名单为空；下一轮只回放这三个标准字段以及匹配原 ID 的 `role=tool` 消息。`finish_reason`、usage、响应体 `id`、模型名和未知字段仅作内部元数据，不进入下一轮 `messages`。
+
+未关闭 thinking 的短文本响应出现了 `reasoning_content`，但本次没有验证 thinking 模式下的完整多步工具回放，因此基础版不得启用该模式或把 `reasoning_content` 宣称为已支持。若未来启用，必须重新进行独立协议探针和回放测试。
 
 ## 安全边界
 

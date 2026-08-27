@@ -1,0 +1,8 @@
+# <type>(<scope>): <summary>
+#
+# 只有项目作者在查看最终审核材料后明确批准，才能填写 approved。
+# 审核批准与远端推送是两个独立门禁。
+
+Human-Review:
+Review-Scope:
+Review-Record:

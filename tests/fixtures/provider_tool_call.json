@@ -1,0 +1,32 @@
+{
+  "id": "probe_response",
+  "model": "configured-model",
+  "choices": [
+    {
+      "message": {
+        "role": "assistant",
+        "content": "<REDACTED>",
+        "tool_calls": [
+          {
+            "id": "probe_call_1",
+            "type": "function",
+            "function": {
+              "name": "return_probe_token",
+              "arguments": "{\"probe_token\":\"PROBE_OK\"}"
+            }
+          }
+        ]
+      },
+      "finish_reason": "tool_calls"
+    }
+  ],
+  "usage": {
+    "prompt_tokens": 0,
+    "completion_tokens": 0,
+    "total_tokens": 0,
+    "cached_tokens": 0,
+    "prompt_tokens_details": {
+      "cached_tokens": 0
+    }
+  }
+}
