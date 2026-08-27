@@ -42,3 +42,22 @@
 - 审核结论：通过；确认上述来源记录、独立实现边界、测试映射、验证证据、已知限制和审核措辞可以纳入目标提交
 - 审核时间：2026-08-28 00:36:28 +08:00
 - 审核依据：完整暂存差异、来源/许可证核对、决策到测试映射、依赖和凭据扫描
+
+<a id="m1-001"></a>
+
+## M1-001：模型连通与最小安全循环
+
+- 审核状态：人工审核通过
+- 审核人：项目作者（通过当前协作任务明确确认）
+- 目标提交：`feat(agent): add verified model client and minimal safe loop`
+- 基线提交：`1b20a4b docs: record open-source reference decisions`
+- 审核范围：配置契约、公共数据模型、非流式 ModelClient、六工具注册表与运行时参数校验、最小 system prompt、工作区/命令/凭据策略、`read_file/write_file/run_command`、最小 AgentLoop、CLI、Windows Python 3.11 离线 CI、相关测试和已验证文档
+- TDD 证据：以下场景均已完成“先观察失败、再最小修复、最后转绿”的闭环：配置新增测试最初出现 13 个失败；注册表、客户端、提示词、安全策略、循环和 CLI 装配最初因模块缺失或行为缺口失败；超大文件预检查、Windows 超时快速终止、`tool_call.type` 校验、拒绝分支参数脱敏、Git 只读白名单逃逸和进程创建期中止均有独立失败记录，当前相关测试全部通过
+- 离线验证：`python -m pytest -q` 共 134 项通过，网络请求数为 0；`python -m compileall -q code_operator scripts` 通过；Windows 目录联接逃逸、真实超时终止、进程创建期中止、子进程 API Key 隔离、拒绝分支参数脱敏和 Git 危险参数分类测试均执行且无跳过
+- 真实闭环：`kimi-k3` 在空临时工作区用 3 轮模型请求和 2 次工具调用创建 `hello.py`；仅人工批准一次 `['python', 'hello.py']`，固定 cwd、退出码 0、stdout 为 `Hello, code-operator!`，最终状态 `COMPLETED`，独立复跑一致
+- 安全边界：真实路径和链接逃逸检查、敏感文件拒绝、`shell=False`、固定 cwd、超时与终止兜底、输入/输出上限、子进程最小环境和当前 Key 精确脱敏均由代码强制；不构成操作系统沙箱
+- 依赖与开源边界：运行依赖仍仅 `httpx`，开发依赖仍仅 `pytest`；未使用 Agent SDK/框架、第三方 Agent 源码或生产代码复用
+- 已知限制：M1 只配置 `read_file/write_file/run_command` 执行器；`list_dir/grep/edit_file` 待 M2；完整上下文裁剪、连续失败/重复调用、全链路 Ctrl-C 和复杂跨平台进程树验证待 M3；Windows CI 只有推送后才能取得远端运行结论
+- 审核结论：通过；确认 M1 实现、TDD 红—绿证据、全量测试、真实模型闭环、安全扫描、文档和已知限制可以纳入目标提交
+- 审核时间：2026-08-28 01:19:59 +08:00
+- 审核依据：完整暂存差异、红—绿测试记录、全量测试与编译结果、真实模型闭环、依赖/凭据/临时文件扫描和实现—文档一致性审查
