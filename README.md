@@ -1,6 +1,6 @@
-# nanocode
+# code-operator
 
-nanocode 是一个正在从零实现的命令行编程智能体（coding agent）。目标是通过模型原生 tool calling，在受约束的本地工作区内读取和修改文件、执行命令，并根据真实执行结果继续完成编程任务。
+code-operator 是一个正在从零实现的命令行编程智能体（coding agent）。目标是通过模型原生 tool calling，在受约束的本地工作区内读取和修改文件、执行命令，并根据真实执行结果继续完成编程任务。
 
 项目不使用 agent 框架或 Agent SDK。AgentLoop、协议处理、工具执行、安全策略、上下文管理、循环终止和错误处理将独立实现。当前仓库仍处于 M0 交付骨架阶段，未完成或未验证的能力不视为已经实现。
 

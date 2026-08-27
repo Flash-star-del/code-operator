@@ -1,4 +1,4 @@
-nanocode
+code-operator
 
 Git 仓库地址：https://github.com/Flash-star-del/code-operator
 
