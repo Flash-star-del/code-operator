@@ -9,9 +9,9 @@ code-operator 是一个正在从零实现的命令行编程智能体（coding ag
 后续运行时只从环境变量读取以下三个必要配置：
 
 ```bash
-NANOCODE_API_KEY=<YOUR_API_KEY>
-NANOCODE_BASE_URL=<YOUR_OPENAI_COMPATIBLE_API_ROOT>
-NANOCODE_MODEL=<YOUR_MODEL_ID>
+CODE_OPERATOR_API_KEY=<YOUR_API_KEY>
+CODE_OPERATOR_BASE_URL=<YOUR_OPENAI_COMPATIBLE_API_ROOT>
+CODE_OPERATOR_MODEL=<YOUR_MODEL_ID>
 ```
 
 API 根地址、模型 ID、输出上限参数和消息回放字段将在 P0 真实协议探针通过后写入准确示例；在此之前不提供未经验证的默认值。API Key 不得写入仓库、README.txt、日志或演示视频。

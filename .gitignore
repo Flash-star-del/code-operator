@@ -2,7 +2,7 @@
 .env.*
 .agent/
 .agents/
-.nanocode/
+.code-operator/
 __pycache__/
 *.pyc
 .pytest_cache/
