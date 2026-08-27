@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import os
+import re
 from collections.abc import Mapping, Sequence
 
 
@@ -17,6 +18,20 @@ _ALLOWED_SUBPROCESS_ENVIRONMENT = {
     "LC_ALL",
 }
 
+_BEARER_PATTERN = re.compile(r"(?i)\bBearer\s+[^\s,;]+")
+_SECRET_ASSIGNMENT_PATTERN = re.compile(
+    r"(?i)(\b[A-Z0-9_]*(?:API_KEY|TOKEN|SECRET|PASSWORD)\b\s*[:=]\s*)"
+    r"([^\s,;]+)"
+)
+
+
+def redact(value: object, secrets: Sequence[str] = ()) -> str:
+    text = str(value)
+    for secret in sorted({item for item in secrets if item}, key=len, reverse=True):
+        text = text.replace(secret, "<REDACTED>")
+    text = _BEARER_PATTERN.sub("Bearer <REDACTED>", text)
+    return _SECRET_ASSIGNMENT_PATTERN.sub(r"\1<REDACTED>", text)
+
 
 class Redactor:
     def __init__(self, secrets: Sequence[str]) -> None:
@@ -25,10 +40,21 @@ class Redactor:
         )
 
     def redact(self, value: object) -> str:
-        text = str(value)
-        for secret in self._secrets:
-            text = text.replace(secret, "<REDACTED>")
-        return text
+        return redact(value, self._secrets)
+
+    def redact_object(self, value: object) -> object:
+        if isinstance(value, Mapping):
+            return {
+                self.redact(key) if isinstance(key, str) else key: self.redact_object(item)
+                for key, item in value.items()
+            }
+        if isinstance(value, list):
+            return [self.redact_object(item) for item in value]
+        if isinstance(value, tuple):
+            return tuple(self.redact_object(item) for item in value)
+        if isinstance(value, str) or isinstance(value, BaseException):
+            return self.redact(value)
+        return value
 
 
 def sanitized_subprocess_environment(

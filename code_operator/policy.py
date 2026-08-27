@@ -40,13 +40,13 @@ def _is_sensitive_name(name: str) -> bool:
     )
 
 
-class WorkspacePolicy:
+class ExecutionPolicy:
     def __init__(self, workspace: str | os.PathLike[str]) -> None:
         self.workspace = Path(workspace).resolve(strict=True)
         if not self.workspace.is_dir():
             raise PathPolicyError("工作区必须是已存在的目录")
 
-    def resolve(
+    def resolve_workspace_path(
         self,
         requested: str | os.PathLike[str],
         *,
@@ -65,6 +65,17 @@ class WorkspacePolicy:
         if any(_is_sensitive_name(part) for part in (*raw_parts, *relative.parts)):
             raise PathPolicyError("拒绝访问敏感文件或内部目录")
         return resolved
+
+    def resolve(
+        self,
+        requested: str | os.PathLike[str],
+        *,
+        for_write: bool = False,
+    ) -> Path:
+        return self.resolve_workspace_path(requested, for_write=for_write)
+
+
+WorkspacePolicy = ExecutionPolicy
 
 
 ApprovalCallback = Callable[[list[str], Path], bool]

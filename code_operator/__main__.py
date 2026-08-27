@@ -21,6 +21,7 @@ from code_operator.redaction import Redactor
 from code_operator.tools.command import run_command
 from code_operator.tools.filesystem import FileTools
 from code_operator.tools.registry import ToolRegistry
+from code_operator.tools.search import SearchTools
 
 
 def build_registry(
@@ -33,6 +34,7 @@ def build_registry(
     workspace_policy = WorkspacePolicy(workspace)
     redactor = Redactor([config.api_key])
     file_tools = FileTools(workspace_policy, redactor=redactor)
+    search_tools = SearchTools(workspace_policy, redactor=redactor)
     command_policy = CommandPolicy(workspace_policy.workspace, approve=approve)
     source_environment = os.environ if environment is None else environment
 
@@ -53,8 +55,11 @@ def build_registry(
 
     return ToolRegistry(
         {
+            "list_dir": file_tools.list_dir,
             "read_file": file_tools.read_file,
+            "grep": search_tools.grep,
             "write_file": file_tools.write_file,
+            "edit_file": file_tools.edit_file,
             "run_command": command_handler,
         }
     )

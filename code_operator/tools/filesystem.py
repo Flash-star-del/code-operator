@@ -62,6 +62,71 @@ class FileTools:
             details={} if details is None else details,
         )
 
+    def list_dir(
+        self,
+        *,
+        tool_call_id: str,
+        path: str = ".",
+        max_depth: int = 2,
+        max_entries: int = 200,
+    ) -> ToolResult:
+        try:
+            resolved = self.policy.resolve_workspace_path(path)
+        except PathPolicyError as error:
+            return self._failure(
+                tool_call_id, "list_dir", "PATH_DENIED", str(error)
+            )
+        if not resolved.exists() or not resolved.is_dir():
+            return self._failure(
+                tool_call_id,
+                "list_dir",
+                "NOT_A_DIRECTORY",
+                "目标目录不存在或不是目录",
+            )
+
+        lines: list[str] = []
+        entry_limit_reached = False
+
+        def visit(directory: Path, depth: int) -> None:
+            nonlocal entry_limit_reached
+            if entry_limit_reached:
+                return
+            try:
+                entries = sorted(directory.iterdir(), key=lambda item: item.name.casefold())
+            except OSError:
+                return
+            for entry in entries:
+                try:
+                    checked = self.policy.resolve_workspace_path(entry)
+                except PathPolicyError:
+                    continue
+                if len(lines) >= max_entries:
+                    entry_limit_reached = True
+                    return
+                is_directory = checked.is_dir()
+                suffix = "/" if is_directory else ""
+                lines.append(f"{self._relative(checked)}{suffix}")
+                if is_directory and depth < max_depth:
+                    visit(checked, depth + 1)
+                    if entry_limit_reached:
+                        return
+
+        visit(resolved, 0)
+        text, char_truncated = _truncate(self.redactor.redact("\n".join(lines)))
+        return ToolResult(
+            tool_call_id=tool_call_id,
+            name="list_dir",
+            ok=True,
+            error_code=None,
+            message="目录列出完成",
+            details={
+                "path": self._relative(resolved),
+                "text": text,
+                "entries": len(lines),
+                "truncated": entry_limit_reached or char_truncated,
+            },
+        )
+
     def read_file(
         self,
         *,
@@ -272,6 +337,140 @@ class FileTools:
             ok=True,
             error_code=None,
             message="文件写入完成",
+            details={
+                "path": relative,
+                "before_hash": before_hash,
+                "after_hash": after_hash,
+                "diff": clean_diff,
+                "diff_truncated": diff_truncated,
+            },
+        )
+
+    def edit_file(
+        self,
+        *,
+        tool_call_id: str,
+        path: str,
+        old_text: str,
+        new_text: str,
+    ) -> ToolResult:
+        try:
+            resolved = self.policy.resolve_workspace_path(path, for_write=True)
+        except PathPolicyError as error:
+            return self._failure(
+                tool_call_id, "edit_file", "PATH_DENIED", str(error)
+            )
+        if not resolved.exists() or not resolved.is_file():
+            return self._failure(
+                tool_call_id, "edit_file", "FILE_NOT_FOUND", "文件不存在"
+            )
+        try:
+            if resolved.stat().st_size > MAX_FILE_BYTES:
+                return self._failure(
+                    tool_call_id,
+                    "edit_file",
+                    "FILE_TOO_LARGE",
+                    "文件超过编辑大小上限",
+                )
+            raw = resolved.read_bytes()
+            before = raw.decode("utf-8")
+        except UnicodeDecodeError:
+            return self._failure(
+                tool_call_id,
+                "edit_file",
+                "BINARY_FILE",
+                "拒绝编辑非 UTF-8 文件",
+            )
+        except OSError as error:
+            return self._failure(
+                tool_call_id, "edit_file", "READ_FAILED", str(error)
+            )
+
+        before_hash = _sha256(raw)
+        expected_hash = self._complete_read_hashes.get(resolved)
+        if expected_hash is None:
+            return self._failure(
+                tool_call_id,
+                "edit_file",
+                "READ_REQUIRED",
+                "编辑已有文件前必须先完整读取",
+            )
+        if expected_hash != before_hash:
+            return self._failure(
+                tool_call_id,
+                "edit_file",
+                "STALE_FILE",
+                "文件在读取后已发生变化，请重新读取",
+            )
+
+        occurrences = before.count(old_text)
+        if occurrences == 0:
+            return self._failure(
+                tool_call_id,
+                "edit_file",
+                "OLD_TEXT_NOT_FOUND",
+                "old_text 在文件中未找到",
+            )
+        if occurrences != 1:
+            return self._failure(
+                tool_call_id,
+                "edit_file",
+                "OLD_TEXT_NOT_UNIQUE",
+                "old_text 在文件中不是唯一匹配",
+            )
+        after = before.replace(old_text, new_text, 1)
+        encoded = after.encode("utf-8")
+        if len(encoded) > MAX_FILE_BYTES:
+            return self._failure(
+                tool_call_id,
+                "edit_file",
+                "FILE_TOO_LARGE",
+                "编辑后的文件超过大小上限",
+            )
+
+        relative = self._relative(resolved)
+        diff = "".join(
+            difflib.unified_diff(
+                before.splitlines(keepends=True),
+                after.splitlines(keepends=True),
+                fromfile=f"a/{relative}",
+                tofile=f"b/{relative}",
+            )
+        )
+        clean_diff, diff_truncated = _truncate(self.redactor.redact(diff))
+        temporary_name: str | None = None
+        try:
+            with tempfile.NamedTemporaryFile(
+                mode="w",
+                encoding="utf-8",
+                newline="",
+                dir=resolved.parent,
+                prefix=f".{resolved.name}.",
+                suffix=".tmp",
+                delete=False,
+            ) as stream:
+                temporary_name = stream.name
+                stream.write(after)
+                stream.flush()
+                os.fsync(stream.fileno())
+            os.replace(temporary_name, resolved)
+            temporary_name = None
+        except OSError as error:
+            return self._failure(
+                tool_call_id, "edit_file", "WRITE_FAILED", str(error)
+            )
+        finally:
+            if temporary_name is not None:
+                Path(temporary_name).unlink(missing_ok=True)
+
+        after_hash = _sha256(encoded)
+        self._complete_read_hashes[resolved] = after_hash
+        return ToolResult(
+            tool_call_id=tool_call_id,
+            name="edit_file",
+            ok=True,
+            error_code=None,
+            message="文件编辑完成",
             details={
                 "path": relative,
                 "before_hash": before_hash,

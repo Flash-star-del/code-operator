@@ -27,6 +27,11 @@ def _terminate_process_tree(process: subprocess.Popen[str]) -> None:
     if process.poll() is not None:
         return
     if os.name == "nt":
+        try:
+            process.send_signal(signal.CTRL_BREAK_EVENT)
+            process.wait(timeout=0.5)
+        except (OSError, subprocess.TimeoutExpired):
+            pass
         subprocess.run(
             ["taskkill.exe", "/PID", str(process.pid), "/T", "/F"],
             shell=False,

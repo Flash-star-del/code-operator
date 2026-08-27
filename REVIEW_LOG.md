@@ -61,3 +61,23 @@
 - 审核结论：通过；确认 M1 实现、TDD 红—绿证据、全量测试、真实模型闭环、安全扫描、文档和已知限制可以纳入目标提交
 - 审核时间：2026-08-28 01:19:59 +08:00
 - 审核依据：完整暂存差异、红—绿测试记录、全量测试与编译结果、真实模型闭环、依赖/凭据/临时文件扫描和实现—文档一致性审查
+
+<a id="m2-001"></a>
+
+## M2-001：六工具、本地安全边界与凭据隔离
+
+- 审核状态：人工审核通过
+- 审核人：项目作者（通过当前协作任务明确确认）
+- 目标提交：`feat(tools): add workspace guardrails and local tools`
+- 基线提交：`d991bc1 feat(agent): add verified model client and minimal safe loop`
+- 审核范围：`ExecutionPolicy.resolve_workspace_path()`、六工具 CLI 装配、目录列表、分页读取、字面量搜索、安全写入、唯一替换、命令输出契约与 Windows 进程树终止、统一递归脱敏、集成测试及已验证文档
+- TDD 证据：路径、文件工具、搜索、六工具装配、命令契约、统一脱敏、六工具集成与 Windows 超时句柄场景均先观察到预期失败，再完成最小实现并转绿；最终自审又发现二进制候选未计入搜索文件上限，追加测试确认失败后修复；当前相关测试全部通过
+- 离线验证：`python -m pytest -q` 共 166 项通过，网络请求数为 0；`python -m compileall -q code_operator scripts` 通过；`tests/test_policy.py` 40 项、`tests/test_filesystem_tools.py` 11 项、`tests/test_search_tool.py` 7 项、`tests/test_command_tool.py` 8 项通过
+- 集成证据：隔离测试仓库完成 `grep -> read_file -> edit_file -> run_command pytest`，pytest 退出码为 0 且 1 项测试通过；工作区外路径、`.env` 和 `.code-operator` 访问均被拒绝
+- Windows 手工探针：父进程启动持续输出的子进程，2 秒工具超时后总耗时 2.19 秒；返回 `COMMAND_TIMEOUT/timed_out=true`，父进程退出，子进程停止且无需额外清理
+- 安全边界：六工具入口均复用真实路径策略；覆盖写入要求完整读取且哈希未变化；新建采用排他模式；命令保持 `shell=False`、固定 cwd、审批和最小子进程环境；终端、工具结果、异常与 JSONL 待写对象统一递归脱敏；这些措施不构成操作系统沙箱
+- 依赖与开源边界：运行依赖仍仅 `httpx`，开发依赖仍仅 `pytest`；核心工具、安全策略和进程处理均独立实现，未使用 Agent SDK/框架、第三方 Agent 源码或生产代码复用
+- 已知限制：M3 的完整上下文裁剪、连续失败/重复调用和模型请求/审批/工具全链路 Ctrl-C 尚未实现；当前进程树证据只覆盖 Windows/Python 3.11；跨平台复杂进程树、并发替换与路径竞态压力测试尚未验证
+- 审核结论：通过；确认 M2 六工具实现、TDD 红—绿证据、全量测试、集成验收、Windows 进程树探针、安全扫描、文档和已知限制可以纳入目标提交
+- 审核时间：2026-08-28 01:46:23 +08:00
+- 审核依据：完整暂存差异、红—绿测试记录、全量测试与编译结果、六工具集成验收、Windows 进程树探针、依赖/凭据/临时文件扫描和实现—文档一致性审查

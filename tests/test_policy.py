@@ -11,6 +11,7 @@ import pytest
 from code_operator.policy import (
     CommandDecision,
     CommandPolicy,
+    ExecutionPolicy,
     PathPolicyError,
     WorkspacePolicy,
 )
@@ -102,6 +103,36 @@ def test_workspace_policy_accepts_normal_new_file(tmp_path: Path) -> None:
     resolved = WorkspacePolicy(workspace).resolve("src/new.py", for_write=True)
 
     assert resolved == workspace.resolve() / "src" / "new.py"
+
+
+@pytest.mark.parametrize(
+    "path",
+    [
+        ".GIT\\config",
+        ".Agent\\state.json",
+        ".AGENTS\\config.json",
+        ".CODE-OPERATOR\\audit.jsonl",
+    ],
+)
+def test_execution_policy_rejects_sensitive_names_across_case_and_separators(
+    tmp_path: Path, path: str
+) -> None:
+    policy = ExecutionPolicy(tmp_path)
+
+    with pytest.raises(PathPolicyError, match="敏感"):
+        policy.resolve_workspace_path(path, for_write=True)
+
+
+def test_execution_policy_exposes_canonical_resolved_workspace_path(
+    tmp_path: Path,
+) -> None:
+    nested = tmp_path / "src"
+    nested.mkdir()
+    policy = ExecutionPolicy(tmp_path)
+
+    resolved = policy.resolve_workspace_path("src\\new.py", for_write=True)
+
+    assert resolved == nested.resolve() / "new.py"
 
 
 @pytest.mark.parametrize(

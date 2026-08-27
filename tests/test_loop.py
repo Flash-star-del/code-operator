@@ -3,7 +3,7 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
-from code_operator.__main__ import run_task
+from code_operator.__main__ import build_registry, run_task
 from code_operator.config import ProviderConfig
 from code_operator.loop import AgentLoop
 from code_operator.models import AssistantTurn, ToolCall, ToolResult, Usage
@@ -269,3 +269,40 @@ def test_cli_assembly_connects_model_loop_and_workspace_tools(tmp_path: Path) ->
     assert result.status == "COMPLETED"
     assert (tmp_path / "hello.py").read_text(encoding="utf-8") == 'print("hello")\n'
     assert len(model.calls[0][1]) == 6
+
+
+def test_cli_registry_configures_all_six_tool_handlers(tmp_path: Path) -> None:
+    target = tmp_path / "sample.py"
+    target.write_text("value = 1\n", encoding="utf-8")
+    config = ProviderConfig(
+        api_key="private",
+        base_url="https://provider.example/v1",
+        model="test-model",
+    )
+    registry = build_registry(
+        config,
+        tmp_path,
+        approve=lambda _argv, _cwd: False,
+        environment={},
+    )
+    calls = [
+        ToolCall("list", "list_dir", json.dumps({})),
+        ToolCall("grep", "grep", json.dumps({"query": "value"})),
+        ToolCall("read", "read_file", json.dumps({"path": "sample.py"})),
+        ToolCall(
+            "edit",
+            "edit_file",
+            json.dumps(
+                {
+                    "path": "sample.py",
+                    "old_text": "value = 1",
+                    "new_text": "value = 2",
+                }
+            ),
+        ),
+    ]
+
+    results = registry.execute_calls(calls)
+
+    assert [result.ok for result in results] == [True, True, True, True]
+    assert target.read_text(encoding="utf-8") == "value = 2\n"
