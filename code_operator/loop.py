@@ -7,7 +7,7 @@ from typing import Protocol
 from code_operator.client import ProviderError, ProviderProtocolError
 from code_operator.config import DEFAULT_CONTEXT_WINDOW, DEFAULT_MAX_OUTPUT_TOKENS
 from code_operator.context import ContextLimitError, ContextManager
-from code_operator.models import AssistantTurn, RunResult, ToolResult
+from code_operator.models import AssistantTurn, RunResult, ToolCall, ToolResult
 from code_operator.prompts import SYSTEM_PROMPT
 from code_operator.tools.registry import ToolProtocolError, ToolRegistry
 
@@ -22,6 +22,12 @@ class ModelLike(Protocol):
         messages: Sequence[Mapping[str, object]],
         tools: Sequence[Mapping[str, object]],
     ) -> AssistantTurn: ...
+
+
+class AuditLike(Protocol):
+    def record_tool(self, call: ToolCall, result: ToolResult) -> None: ...
+
+    def record_run(self, result: RunResult) -> None: ...
 
 
 def _call_result_signature(
@@ -53,6 +59,7 @@ class AgentLoop:
         context_window: int = DEFAULT_CONTEXT_WINDOW,
         max_output_tokens: int = DEFAULT_MAX_OUTPUT_TOKENS,
         system_prompt: str = SYSTEM_PROMPT,
+        audit: AuditLike | None = None,
     ) -> None:
         self._client = client
         self._registry = registry
@@ -63,6 +70,7 @@ class AgentLoop:
             context_window=context_window,
             max_output_tokens=max_output_tokens,
         )
+        self._audit = audit
 
     def run(self, user_task: str) -> RunResult:
         messages: list[dict[str, object]] = [
@@ -93,6 +101,11 @@ class AgentLoop:
                     messages, tool_schemas
                 ),
             )
+            if self._audit is not None:
+                try:
+                    self._audit.record_run(run_result)
+                except Exception:
+                    pass
             return run_result
 
         for _ in range(self._max_model_rounds):
@@ -149,6 +162,11 @@ class AgentLoop:
                             "content": result_content,
                         }
                     )
+                    if self._audit is not None:
+                        try:
+                            self._audit.record_tool(call, tool_result)
+                        except Exception:
+                            pass
                     if tool_result.error_code == "USER_ABORTED":
                         return result("USER_ABORTED")
                     if tool_result.ok:

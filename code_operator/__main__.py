@@ -7,6 +7,7 @@ import sys
 from collections.abc import Mapping, Sequence
 from pathlib import Path
 
+from code_operator.audit import JsonlAudit
 from code_operator.client import ModelClient
 from code_operator.config import ConfigError, ProviderConfig, load_provider_config
 from code_operator.loop import AgentLoop, ModelLike
@@ -95,6 +96,7 @@ def run_task(
     selected_client = owned_client if owned_client is not None else client
     if selected_client is None:
         raise RuntimeError("ModelClient 初始化失败")
+    audit = JsonlAudit(workspace, redactor=Redactor([config.api_key]))
     try:
         return AgentLoop(
             selected_client,
@@ -103,6 +105,7 @@ def run_task(
             max_tool_calls=config.max_tool_calls,
             context_window=config.context_window,
             max_output_tokens=config.max_output_tokens,
+            audit=audit,
         ).run(task)
     finally:
         if owned_client is not None:
