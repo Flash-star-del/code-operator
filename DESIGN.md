@@ -80,6 +80,16 @@ CLI 已提供 `--workspace`、`--ask-all`、`--auto-approve-tests`、`--max-mode
 
 2026-08-28 的 M4 真实任务在仓库外全新隔离项目上使用 `kimi-k3`。独立前置 pytest 得到 `2 failed, 1 passed`；审计记录的工具序列为 `list_dir -> read_file -> read_file -> run_command(exit 1) -> edit_file -> run_command(exit 0)`，模型没有写入或编辑测试文件。AgentLoop 返回 `COMPLETED`，共 6 轮、6 次工具调用，供应商每轮 usage 均可用并合计 10,890 tokens；随后独立复跑得到 `3 passed`。7 条审计记录中未出现当前 API Key、Authorization 或 Bearer；提交内的脱敏结构化摘要保存于 [`docs/evidence/m4-real-task.json`](docs/evidence/m4-real-task.json)，不含请求 ID、供应商响应正文、工具参数正文或输出。该验收只证明当前 Windows/Python 3.11、单个隔离任务和本次供应商响应；获批测试代码仍不受操作系统沙箱约束。提交 `1c592a3` 后续普通推送，GitHub Actions `offline-tests` 运行 `33170575939` 结论为 `success`；远端 annotated tag `v0.1.0` 解引用到该提交并注明实际验证平台，Ubuntu 仍未验证。
 
+## E2 黄金 Eval 验证
+
+E2 使用冻结的订单价格流水线任务：`pricing.py` 负责折扣取整，`invoice.py` 负责折后计税。评测器在每次运行前复制同一 fixture 和提示到全新临时目录，以 Git tree 建立仅用于审计的基线，独立执行初始与最终 pytest，并强制测试文件组合 SHA-256 不变。成功运行只允许变更 `pricing.py` 和 `invoice.py`，且必须有非空完整 diff。
+
+2026-08-29 的最终正式评测固定使用 `kimi-k3`，三个新工作区全部成功，因而该固定任务三次中成功三次，达到至少 2/3 的视频候选门槛。每次初始测试退出码为 1，最终为 0；AgentLoop 均为 `COMPLETED`，三次分别使用 6、7、6 轮模型调用，均为 8 次工具调用。三次供应商 `total_tokens` 分别为 18,508、22,006 和 19,332，每轮 usage 均完整；这些数字只是本固定任务的三次样本，不代表整体成功率或性能上界。
+
+脱敏结构化报告保存在 [`docs/evidence/e2-golden-eval.json`](docs/evidence/e2-golden-eval.json)。报告保留三个连续 index、平台与配置限制、fixture/提示哈希、初后测摘要、测试哈希、变更路径和完整 diff；不保存 API Key、Authorization、请求 ID、供应商响应正文、reasoning、完整消息历史或工具原始参数/输出。测试项目代码仍由当前用户权限执行，自动批准 pytest 不构成操作系统沙箱。
+
+首次完整补丁审查发现 harness 的 pytest/Git 子进程未显式净化父进程环境。回归测试先复现合成 Key 可见，再复用 `sanitized_subprocess_environment()` 修复；修复前报告扫描未发现当前 API Key 或禁止字段，但不计入最终结论，原样保留于 [`docs/evidence/e2-golden-eval-pre-env-sanitization.json`](docs/evidence/e2-golden-eval-pre-env-sanitization.json)。修复后所有三次计数从零重新开始。
+
 ## 提示、工具描述与顺序执行
 
 system prompt 负责跨工具、跨轮次的不变量：先检查再修改、依据真实工具结果继续、测试失败不得宣称完成、遵守审批和路径边界。每个工具的 `description` 只说明该工具的局部用途、参数和输出限制，帮助模型在当前轮选择正确函数。两者不能互相替代：把所有细节塞进 system prompt 会增加上下文并形成重复事实源，只依赖 description 又无法表达跨轮终止和诚实总结。无论哪一层都不是安全边界，路径、参数、审批和终止仍由代码验证。

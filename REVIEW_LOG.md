@@ -182,4 +182,25 @@
 - 审核时间：2026-08-29 01:17:20 +08:00
 - 审核依据：完整暂存补丁 `E2-DESIGN-001-review.patch`（SHA-256 `2F2974B5A66F0D81B3A067CB3112AEE5DD2E42AC6EBAEC7509A50414C6A07745`）和项目作者对三段设计及最终书面规格的逐次批准
 
+<a id="e2-001"></a>
+
+## E2-001：可复现黄金编码任务与真实三次 Eval
+
+- 审核状态：人工审核通过
+- 审核人：项目作者（通过当前协作任务明确确认）
+- 目标提交：`test(eval): add reproducible golden coding task`
+- 基线提交：`3cbb898 docs(eval): design reproducible golden coding task`
+- 审核范围：冻结订单价格流水线 fixture 与提示、三次评测 runner、临时 Git tree 基线、初后测与测试哈希门禁、Windows Job Object 进程树终止、子进程凭据环境净化、排他原子报告、真实 AgentLoop 假模型集成、CLI、README/DESIGN、实施计划及修复前后两组脱敏证据
+- TDD 证据：模块缺失、非法税率、后代进程残留、运行缓存污染哈希、报告半文件、测试目录删除、异常正文泄露、Git 暂存区绕过、非 `RunResult` 返回及子进程可见合成 API Key 均先观察预期失败，再完成最小修复并转绿
+- 离线验证：`tests/test_golden_eval.py` 29 项通过；`python -m pytest -q` 最终 269 项通过；`python -m compileall -q code_operator evals tests` 和暂存差异格式检查通过；脚本化假模型通过真实 `run_task()` 完成 4 轮、5 次工具调用的离线修复闭环
+- 正式结果：环境净化修复后使用 `kimi-k3` 从零重跑三个全新工作区，该固定任务 3/3 成功；初测退出码均为 1，后测均为 0，状态均为 `COMPLETED`，轮次为 6/7/6，工具调用均为 8，tokens 为 18,508/22,006/19,332，usage 均完整
+- 成功判据：三次测试 SHA-256 前后均一致，变更路径仅为 `invoice.py` 和 `pricing.py`，完整 diff 均非空且准确修复折扣四舍五入与折后计税两个根因；三个 index 连续，未删除或重排样本
+- 审查修正：完整暂存补丁首轮审查发现 harness 的 pytest/Git 子进程继承 Provider 环境；追加红—绿测试后复用 `sanitized_subprocess_environment()` 修复。修复前 3/3 报告扫描无实际凭据泄露，但不计入最终结论，已原样保留；最终完整暂存差异复审无未解决 Critical/Important/阻塞性 Minor
+- 安全扫描：当前 API Key 在工作树、Git 历史、完整审核补丁和两份报告中的精确命中数均为 0；暂存范围无私钥、Bearer、`.env`、audit、缓存、PID 或临时运行文件
+- 依赖与开源边界：未修改 `code_operator/` 核心或依赖文件；runner 只复用已有 `run_task()` 和脱敏原语；未引入 Agent SDK/框架、第三方 Agent 源码或翻译式移植
+- 已知限制：结果只覆盖 Windows/Python 3.11 与一个冻结任务的三次样本，不代表整体成功率；测试代码仍以当前用户权限执行，不构成 OS 沙箱；Ubuntu 和远程 CI 尚待推送后验证
+- 审核结论：通过；确认 E2 fixture、runner、严格判据、TDD 证据、修复后真实三次结果、脱敏边界、文档和已知限制可以纳入目标提交；本结论不授权远程推送
+- 审核时间：2026-08-29 07:34:13 +08:00
+- 审核依据：完整暂存补丁 `E2-001-review.patch`（SHA-256 `C1A5A07996F36A945628EAC27657F949308C37353D4E590F30106625A6E18AD5`）、29 项专项测试、269 项全量测试、编译与差异检查、修复前后两组真实报告、凭据/临时文件扫描、任务级规格/质量复核与最终完整暂存差异审查
+
 本记录只覆盖上述审核范围，不扩大功能实现、远端推送或标签权限。

@@ -42,6 +42,12 @@ python -m code_operator --workspace <WORKSPACE> "<TASK>"
 
 ## 开发状态
 
-执行顺序为 M0 -> P0 -> R0 -> M1 -> M2 -> M3 -> M4 -> E1/E2/E3。当前 Windows/Python 3.11 上 240 项离线测试通过；脚本化假模型覆盖读文件、搜索、两次修改、首次测试失败、再次测试成功和最终总结，并逐轮核对回放字段与工具 ID 配对。测试进程会拒绝未模拟的真实 socket 连接。
+执行顺序为 M0 -> P0 -> R0 -> M1 -> M2 -> M3 -> M4 -> E1/E2/E3。当前 Windows/Python 3.11 上 269 项离线测试通过；脚本化假模型覆盖读文件、搜索、两次修改、首次测试失败、再次测试成功和最终总结，并逐轮核对回放字段与工具 ID 配对。测试进程会拒绝未模拟的真实 socket 连接。
 
 2026-08-28 的隔离 buggy Python 项目真实验收使用 `kimi-k3`：初始独立测试为 2 失败、1 通过，Agent 只修改生产文件，最终独立复跑为 3 通过；状态 `COMPLETED`，共 6 轮、6 次工具调用，供应商报告 10,890 tokens。审计中未出现当前 API Key、Authorization 或 Bearer；脱敏结构化证据见 [`docs/evidence/m4-real-task.json`](docs/evidence/m4-real-task.json)。Ubuntu CI 尚未验证；`/history` 未注册。本地 token 值只是按计划公式计算的粗估，不是供应商 tokenizer 上界。详细设计和已验证边界见 `DESIGN.md`。
+
+## 黄金 Eval
+
+冻结的订单价格流水线任务通过 `python -m evals.run_golden --report <NEW_REPORT.json>` 在三个全新临时工作区运行。该 harness 只自动批准明确的 pytest，测试文件哈希必须保持不变；这不构成 OS 沙箱。
+
+2026-08-29 的最终正式 `kimi-k3` 运行中，该固定任务三次中成功三次。三次初始 pytest 均为非零退出，最终 pytest 均为零；测试哈希未变，变更路径均仅为 `pricing.py` 和 `invoice.py`。脱敏的三次完整结果见 [`docs/evidence/e2-golden-eval.json`](docs/evidence/e2-golden-eval.json)。完整补丁审查曾发现评测器子进程未显式净化环境；修复前报告未发现实际凭据泄露，但不计入最终结论，已原样保留为 [`docs/evidence/e2-golden-eval-pre-env-sanitization.json`](docs/evidence/e2-golden-eval-pre-env-sanitization.json)。该结果只描述这一个冻结任务的三次样本，不泛化为整体成功率。

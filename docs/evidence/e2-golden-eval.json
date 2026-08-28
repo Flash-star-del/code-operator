@@ -1,0 +1,103 @@
+{
+  "schema_version": 1,
+  "platform": {
+    "os": "Windows-10-10.0.26200-SP0",
+    "python": "3.11.5"
+  },
+  "configuration": {
+    "model": "kimi-k3",
+    "context_window": 32000,
+    "max_output_tokens": 8000,
+    "max_model_rounds": 16,
+    "max_tool_calls": 32
+  },
+  "fixture_sha256": "a1c426098e3c073e73f5ea99f63be4b229ed0d429477a7946e527f0ff16af060",
+  "task_sha256": "ff456208f65bab36bf6ee0fcea8bb79386131b63bcc8775bf30f419f1d3aba30",
+  "batch_status": "COMPLETED",
+  "run_count": 3,
+  "success_count": 3,
+  "video_candidate": true,
+  "runs": [
+    {
+      "index": 1,
+      "success": true,
+      "failure_reasons": [],
+      "initial_test": {
+        "exit_code": 1,
+        "summary": "            tax_percent=8,\n        )\n        assert totals.subtotal_cents == 3497\n>       assert totals.discounted_subtotal_cents == 2972\nE       assert 2973 == 2972\nE        +  where 2973 = InvoiceTotals(subtotal_cents=3497, discounted_subtotal_cents=2973, tax_cents=280, total_cents=3253).discounted_subtotal_cents\ntests\\test_invoice.py:44: AssertionError\n=========================== short test summary info ===========================\nFAILED tests/test_invoice.py::test_discount_rounds_half_cent_up - assert 51 =...\nFAILED tests/test_invoice.py::test_tax_uses_discounted_subtotal - assert 100 ...\nFAILED tests/test_invoice.py::test_multi_item_discount_tax_and_rounding - ass...\n3 failed, 2 passed in 0.14s"
+      },
+      "final_test": {
+        "exit_code": 0,
+        "timed_out": false,
+        "summary": ".....                                                                    [100%]\n5 passed in 0.01s"
+      },
+      "agent_status": "COMPLETED",
+      "model_rounds": 6,
+      "tool_calls": 8,
+      "provider_total_tokens": 18508,
+      "usage_complete": true,
+      "tests_sha256_before": "705797c69c6ac38a2a52167af802a5e5c731c83362876297cb7e4c15290e6568",
+      "tests_sha256_after": "705797c69c6ac38a2a52167af802a5e5c731c83362876297cb7e4c15290e6568",
+      "tests_unchanged": true,
+      "changed_paths": [
+        "invoice.py",
+        "pricing.py"
+      ],
+      "git_diff": "diff --git a/invoice.py b/invoice.py\nindex d1cac61..d988bc1 100644\n--- a/invoice.py\n+++ b/invoice.py\n@@ -37,7 +37,7 @@ def calculate_invoice(\n     )\n     discounted_cents = discounted_subtotal(subtotal_cents, discount_percent)\n     require_percent(tax_percent, \"tax_percent\")\n-    tax_cents = round_ratio_half_up(subtotal_cents * tax_percent, 100)\n+    tax_cents = round_ratio_half_up(discounted_cents * tax_percent, 100)\n     return InvoiceTotals(\n         subtotal_cents=subtotal_cents,\n         discounted_subtotal_cents=discounted_cents,\ndiff --git a/pricing.py b/pricing.py\nindex 8d23378..f6eea86 100644\n--- a/pricing.py\n+++ b/pricing.py\n@@ -30,5 +30,5 @@ def line_subtotal(unit_price_cents: int, quantity: int) -> int:\n def discounted_subtotal(subtotal_cents: int, discount_percent: int) -> int:\n     _require_non_negative(subtotal_cents, \"subtotal_cents\")\n     require_percent(discount_percent, \"discount_percent\")\n-    discount_cents = subtotal_cents * discount_percent // 100\n+    discount_cents = round_ratio_half_up(subtotal_cents * discount_percent, 100)\n     return subtotal_cents - discount_cents\n"
+    },
+    {
+      "index": 2,
+      "success": true,
+      "failure_reasons": [],
+      "initial_test": {
+        "exit_code": 1,
+        "summary": "            tax_percent=8,\n        )\n        assert totals.subtotal_cents == 3497\n>       assert totals.discounted_subtotal_cents == 2972\nE       assert 2973 == 2972\nE        +  where 2973 = InvoiceTotals(subtotal_cents=3497, discounted_subtotal_cents=2973, tax_cents=280, total_cents=3253).discounted_subtotal_cents\ntests\\test_invoice.py:44: AssertionError\n=========================== short test summary info ===========================\nFAILED tests/test_invoice.py::test_discount_rounds_half_cent_up - assert 51 =...\nFAILED tests/test_invoice.py::test_tax_uses_discounted_subtotal - assert 100 ...\nFAILED tests/test_invoice.py::test_multi_item_discount_tax_and_rounding - ass...\n3 failed, 2 passed in 0.11s"
+      },
+      "final_test": {
+        "exit_code": 0,
+        "timed_out": false,
+        "summary": ".....                                                                    [100%]\n5 passed in 0.01s"
+      },
+      "agent_status": "COMPLETED",
+      "model_rounds": 7,
+      "tool_calls": 8,
+      "provider_total_tokens": 22006,
+      "usage_complete": true,
+      "tests_sha256_before": "705797c69c6ac38a2a52167af802a5e5c731c83362876297cb7e4c15290e6568",
+      "tests_sha256_after": "705797c69c6ac38a2a52167af802a5e5c731c83362876297cb7e4c15290e6568",
+      "tests_unchanged": true,
+      "changed_paths": [
+        "invoice.py",
+        "pricing.py"
+      ],
+      "git_diff": "diff --git a/invoice.py b/invoice.py\nindex d1cac61..d988bc1 100644\n--- a/invoice.py\n+++ b/invoice.py\n@@ -37,7 +37,7 @@ def calculate_invoice(\n     )\n     discounted_cents = discounted_subtotal(subtotal_cents, discount_percent)\n     require_percent(tax_percent, \"tax_percent\")\n-    tax_cents = round_ratio_half_up(subtotal_cents * tax_percent, 100)\n+    tax_cents = round_ratio_half_up(discounted_cents * tax_percent, 100)\n     return InvoiceTotals(\n         subtotal_cents=subtotal_cents,\n         discounted_subtotal_cents=discounted_cents,\ndiff --git a/pricing.py b/pricing.py\nindex 8d23378..f6eea86 100644\n--- a/pricing.py\n+++ b/pricing.py\n@@ -30,5 +30,5 @@ def line_subtotal(unit_price_cents: int, quantity: int) -> int:\n def discounted_subtotal(subtotal_cents: int, discount_percent: int) -> int:\n     _require_non_negative(subtotal_cents, \"subtotal_cents\")\n     require_percent(discount_percent, \"discount_percent\")\n-    discount_cents = subtotal_cents * discount_percent // 100\n+    discount_cents = round_ratio_half_up(subtotal_cents * discount_percent, 100)\n     return subtotal_cents - discount_cents\n"
+    },
+    {
+      "index": 3,
+      "success": true,
+      "failure_reasons": [],
+      "initial_test": {
+        "exit_code": 1,
+        "summary": "            tax_percent=8,\n        )\n        assert totals.subtotal_cents == 3497\n>       assert totals.discounted_subtotal_cents == 2972\nE       assert 2973 == 2972\nE        +  where 2973 = InvoiceTotals(subtotal_cents=3497, discounted_subtotal_cents=2973, tax_cents=280, total_cents=3253).discounted_subtotal_cents\ntests\\test_invoice.py:44: AssertionError\n=========================== short test summary info ===========================\nFAILED tests/test_invoice.py::test_discount_rounds_half_cent_up - assert 51 =...\nFAILED tests/test_invoice.py::test_tax_uses_discounted_subtotal - assert 100 ...\nFAILED tests/test_invoice.py::test_multi_item_discount_tax_and_rounding - ass...\n3 failed, 2 passed in 0.12s"
+      },
+      "final_test": {
+        "exit_code": 0,
+        "timed_out": false,
+        "summary": ".....                                                                    [100%]\n5 passed in 0.01s"
+      },
+      "agent_status": "COMPLETED",
+      "model_rounds": 6,
+      "tool_calls": 8,
+      "provider_total_tokens": 19332,
+      "usage_complete": true,
+      "tests_sha256_before": "705797c69c6ac38a2a52167af802a5e5c731c83362876297cb7e4c15290e6568",
+      "tests_sha256_after": "705797c69c6ac38a2a52167af802a5e5c731c83362876297cb7e4c15290e6568",
+      "tests_unchanged": true,
+      "changed_paths": [
+        "invoice.py",
+        "pricing.py"
+      ],
+      "git_diff": "diff --git a/invoice.py b/invoice.py\nindex d1cac61..d988bc1 100644\n--- a/invoice.py\n+++ b/invoice.py\n@@ -37,7 +37,7 @@ def calculate_invoice(\n     )\n     discounted_cents = discounted_subtotal(subtotal_cents, discount_percent)\n     require_percent(tax_percent, \"tax_percent\")\n-    tax_cents = round_ratio_half_up(subtotal_cents * tax_percent, 100)\n+    tax_cents = round_ratio_half_up(discounted_cents * tax_percent, 100)\n     return InvoiceTotals(\n         subtotal_cents=subtotal_cents,\n         discounted_subtotal_cents=discounted_cents,\ndiff --git a/pricing.py b/pricing.py\nindex 8d23378..f6eea86 100644\n--- a/pricing.py\n+++ b/pricing.py\n@@ -30,5 +30,5 @@ def line_subtotal(unit_price_cents: int, quantity: int) -> int:\n def discounted_subtotal(subtotal_cents: int, discount_percent: int) -> int:\n     _require_non_negative(subtotal_cents, \"subtotal_cents\")\n     require_percent(discount_percent, \"discount_percent\")\n-    discount_cents = subtotal_cents * discount_percent // 100\n+    discount_cents = round_ratio_half_up(subtotal_cents * discount_percent, 100)\n     return subtotal_cents - discount_cents\n"
+    }
+  ]
+}
