@@ -78,7 +78,26 @@ CLI 已提供 `--workspace`、`--ask-all`、`--auto-approve-tests`、`--max-mode
 
 同一集成文件还覆盖未知工具、坏 arguments、策略拒绝、成功 HTTP 的坏 JSON 不重试、可重试 HTTP 错误恢复、真实命令超时、真实输出截断、只裁剪最旧完整回合和空最终响应。`tests/conftest.py` 会让主 pytest 进程的任何未模拟 socket 连接直接失败；HTTP 测试只使用 `httpx.MockTransport`。Windows/Python 3.11 上源码与测试字节码编译成功，218 项离线测试连续两次分别在 6.37 秒和 6.39 秒内通过。CI 保持 Windows/Python 3.11 为阻塞平台并增加编译步骤；Ubuntu 尚未验证，不宣称跨平台通过。
 
-2026-08-28 的 M4 真实任务在仓库外全新隔离项目上使用 `kimi-k3`。独立前置 pytest 得到 `2 failed, 1 passed`；审计记录的工具序列为 `list_dir -> read_file -> read_file -> run_command(exit 1) -> edit_file -> run_command(exit 0)`，模型没有写入或编辑测试文件。AgentLoop 返回 `COMPLETED`，共 6 轮、6 次工具调用，供应商每轮 usage 均可用并合计 10,890 tokens；随后独立复跑得到 `3 passed`。7 条审计记录中未出现当前 API Key、Authorization 或 Bearer；提交内的脱敏结构化摘要保存于 [`docs/evidence/m4-real-task.json`](docs/evidence/m4-real-task.json)，不含请求 ID、供应商响应正文、工具参数正文或输出。该验收只证明当前 Windows/Python 3.11、单个隔离任务和本次供应商响应；获批测试代码仍不受操作系统沙箱约束，远端 M4 CI 与 `v0.1.0` 标签必须在人工提交审核和推送门禁后另行验证。
+2026-08-28 的 M4 真实任务在仓库外全新隔离项目上使用 `kimi-k3`。独立前置 pytest 得到 `2 failed, 1 passed`；审计记录的工具序列为 `list_dir -> read_file -> read_file -> run_command(exit 1) -> edit_file -> run_command(exit 0)`，模型没有写入或编辑测试文件。AgentLoop 返回 `COMPLETED`，共 6 轮、6 次工具调用，供应商每轮 usage 均可用并合计 10,890 tokens；随后独立复跑得到 `3 passed`。7 条审计记录中未出现当前 API Key、Authorization 或 Bearer；提交内的脱敏结构化摘要保存于 [`docs/evidence/m4-real-task.json`](docs/evidence/m4-real-task.json)，不含请求 ID、供应商响应正文、工具参数正文或输出。该验收只证明当前 Windows/Python 3.11、单个隔离任务和本次供应商响应；获批测试代码仍不受操作系统沙箱约束。提交 `1c592a3` 后续普通推送，GitHub Actions `offline-tests` 运行 `33170575939` 结论为 `success`；远端 annotated tag `v0.1.0` 解引用到该提交并注明实际验证平台，Ubuntu 仍未验证。
+
+## 提示、工具描述与顺序执行
+
+system prompt 负责跨工具、跨轮次的不变量：先检查再修改、依据真实工具结果继续、测试失败不得宣称完成、遵守审批和路径边界。每个工具的 `description` 只说明该工具的局部用途、参数和输出限制，帮助模型在当前轮选择正确函数。两者不能互相替代：把所有细节塞进 system prompt 会增加上下文并形成重复事实源，只依赖 description 又无法表达跨轮终止和诚实总结。无论哪一层都不是安全边界，路径、参数、审批和终止仍由代码验证。
+
+同一 assistant turn 的工具调用严格按供应商给出的顺序执行并按原 ID 回传。这样，前一次读取可以授权下一次编辑，前一次修改可以决定下一次测试，审批提示和审计顺序也能稳定复现；代价是独立只读工具无法并行、延迟更高。基础版优先可解释的文件状态和确定性配对，不引入并行调度器及其写冲突、取消和部分失败语义。
+
+M1 的三核心工具采用稳定结果契约：`read_file` 返回规范化相对路径、带行号内容、范围、总行数、截断与完整读取标志；`write_file/edit_file` 返回修改前后哈希、受限 unified diff 和截断标志；`run_command` 返回参数数组、退出码、stdout/stderr、超时和各自截断状态。错误也使用同一 `ToolResult` 外壳和原调用 ID，因此 AgentLoop 不需要从自然语言猜测结果类型。
+
+## 明确拒绝的替代方案
+
+- **文本 JSON 工具协议：** P0 已验证供应商原生 `tools/tool_calls`；再让模型在正文中拼 JSON 会增加解析歧义、伪造 ID 和提示注入面。
+- **任意供应商字段透传：** 未经探针确认的字段可能改变下一轮语义；当前只回放 P0 白名单，把 usage、finish reason 和请求 ID 留作内部元数据。
+- **未完整读取即覆盖整文件：** 会把模型的旧认知写回磁盘并覆盖用户并发修改；因此要求完整读取和内容哈希仍匹配。
+- **通用 Shell：** Shell 字符串会引入转义、管道、重定向和平台差异；基础版只接受参数数组、`shell=False`、固定 cwd 和审批。
+- **影子 Git：** 自动初始化、暂存或回滚会污染用户仓库并制造隐藏状态；基础版直接工作于用户指定目录，只把 Git 当普通受策略约束的命令。
+- **模型自动摘要：** 摘要会额外调用模型、丢失可验证细节并产生不可确定历史；超预算时只裁剪最旧完整回合，最低集合仍超限则停止。
+- **并行工具：** 并行写入、读取后编辑和审批顺序需要冲突合并语义；基础版顺序执行以保持状态可解释，接受延迟代价。
+- **Resume/会话恢复：** 持久会话需要版本化消息、工具副作用和凭据生命周期；题目基础闭环不要求，当前每次 CLI 运行是独立任务。
 
 ## 开源经验校准与独立实现边界
 

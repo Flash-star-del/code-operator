@@ -144,4 +144,24 @@
 - 审核时间：2026-08-28 19:30:34 +08:00
 - 审核依据：完整暂存补丁 `M4-001-review.patch`（SHA-256 `029E337F0B5A6E0AEB9143611AB48B6C0393566CF91DB2DE6782E569B4A1C777`）、全量离线测试与编译结果、真实任务独立前后测试、脱敏审计和结构化证据、凭据扫描以及规格/代码质量两阶段复核
 
+<a id="e1-001"></a>
+
+## E1-001：设计答辩材料与提交物预检
+
+- 审核状态：人工审核通过
+- 审核人：项目作者（通过当前协作任务明确确认）
+- 目标提交：`docs: add design notes and submission preflight`
+- 基线提交：`1c592a3 test: add offline integration suite and real task evidence`
+- 审核范围：`DESIGN.md` 的提示分工、顺序执行、工具契约和拒绝方案，`DEFENSE.md` 的架构陈述与 14 个追问，`REFERENCES.md` 的当前测试映射，README 状态，M4 远端 CI 证据同步，以及提交 ZIP 预检脚本和测试
+- TDD 证据：预检模块最初缺失导致测试收集失败；200 MB 恰好允许/超过 1 字节拒绝先暴露错误边界后修复；独立复核提出的超大 README 预解压、NaN 时长、损坏 Deflate、损坏 LZMA 和截断成员均先观察预期失败，再增加最小异常归一化并转绿
+- 本地验证：`tests/test_submission_preflight.py` 共 22 项通过；`python -m pytest -q` 共 240 项通过；`python -m compileall -q code_operator scripts tests`、暂存差异格式检查和 M4 证据 JSON 解析通过；`README.txt` 为 820 个 Unicode 字符
+- 预检契约：要求显式本人姓名，ZIP 严格命名为 `<姓名>.zip`，根层恰有 UTF-8 `README.txt` 和一个小写 `.mp4`，拒绝目录、隐藏、重复和加密成员；README 不超过 1000 个 Unicode 字符，视频不超过 200 MiB；有 ffprobe 时检查不超过 120 秒，否则输出人工确认警告
+- 文档与开源边界：四个固定来源的 URL、40 位 commit、许可证和当前自有测试证据已复核；第三方生产代码复用仍为“无”，未创建 `THIRD_PARTY_NOTICES.md`，未新增依赖
+- 独立复核：规格复核确认 E1 文档与题目边界一致；代码质量复核发现并推动关闭 ZIP 损坏成员和 README 解压上限问题，最终无未解决 Critical/Important/Minor
+- 安全扫描：当前 API Key 在完整暂存补丁中的精确命中数为 0，形似凭据命中数为 0；禁止提交的凭据、审计日志、缓存、PID 和临时文件名命中数为 0
+- 已知限制：当前环境没有 ffprobe，最终视频必须人工或在具备 ffprobe 的环境确认时长；最终 MP4 和姓名 ZIP 尚未生成；Ubuntu 未验证；E2/E3 尚未执行；10-15 分钟模拟答辩由项目作者于 2026-08-29 明确延期至最终交付
+- 审核结论：通过；确认上述文档、预检实现、TDD 证据、验证结果、开源边界和已知限制可以纳入目标提交；本结论不授权远端推送
+- 审核时间：2026-08-29 00:48:32 +08:00
+- 审核依据：完整暂存补丁 `E1-001-review.patch`（SHA-256 `5D92B6FBDC5E65478859E2093F9BE63BD1A0617016FB5EBFC8534EBE0677A717`）、全量测试与编译结果、错误提交物真实非零 JSON 探针、README 字符计数、凭据/临时文件扫描和两阶段独立复核
+
 本记录只覆盖上述审核范围，不扩大功能实现、远端推送或标签权限。

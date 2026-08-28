@@ -2,7 +2,7 @@
 
 code-operator 是一个正在从零实现的命令行编程智能体（coding agent）。目标是通过模型原生 tool calling，在受约束的本地工作区内读取和修改文件、执行命令，并根据真实执行结果继续完成编程任务。
 
-项目不使用 agent 框架或 Agent SDK。AgentLoop、协议处理、工具执行和安全策略均独立实现。M0 至 M3 已完成验收并推送；M4 的本地离线测试和真实任务验收已完成，远端 CI、人工提交审核和基础版标签仍待门禁。未完成或未验证的能力不视为已经实现。
+项目不使用 agent 框架或 Agent SDK。AgentLoop、协议处理、工具执行和安全策略均独立实现。M0 至 M4 已完成验收，Windows CI 已通过，基础版 annotated tag `v0.1.0` 已发布。未完成或未验证的能力不视为已经实现。
 
 ## 配置约定
 
@@ -42,6 +42,6 @@ python -m code_operator --workspace <WORKSPACE> "<TASK>"
 
 ## 开发状态
 
-执行顺序为 M0 -> P0 -> R0 -> M1 -> M2 -> M3 -> M4 -> E1/E2/E3。当前 Windows/Python 3.11 上 218 项离线测试通过；脚本化假模型覆盖读文件、搜索、两次修改、首次测试失败、再次测试成功和最终总结，并逐轮核对回放字段与工具 ID 配对。测试进程会拒绝未模拟的真实 socket 连接。
+执行顺序为 M0 -> P0 -> R0 -> M1 -> M2 -> M3 -> M4 -> E1/E2/E3。当前 Windows/Python 3.11 上 240 项离线测试通过；脚本化假模型覆盖读文件、搜索、两次修改、首次测试失败、再次测试成功和最终总结，并逐轮核对回放字段与工具 ID 配对。测试进程会拒绝未模拟的真实 socket 连接。
 
 2026-08-28 的隔离 buggy Python 项目真实验收使用 `kimi-k3`：初始独立测试为 2 失败、1 通过，Agent 只修改生产文件，最终独立复跑为 3 通过；状态 `COMPLETED`，共 6 轮、6 次工具调用，供应商报告 10,890 tokens。审计中未出现当前 API Key、Authorization 或 Bearer；脱敏结构化证据见 [`docs/evidence/m4-real-task.json`](docs/evidence/m4-real-task.json)。Ubuntu CI 尚未验证；`/history` 未注册。本地 token 值只是按计划公式计算的粗估，不是供应商 tokenizer 上界。详细设计和已验证边界见 `DESIGN.md`。

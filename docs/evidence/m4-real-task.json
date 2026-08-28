@@ -50,7 +50,9 @@
     "raw_tool_outputs_saved": false
   },
   "verification_scope": {
-    "remote_ci": "pending",
+    "remote_ci": "success",
+    "remote_ci_run_id": 33170575939,
+    "release_tag": "v0.1.0",
     "ubuntu": "not verified",
     "operating_system_sandbox": false
   }
