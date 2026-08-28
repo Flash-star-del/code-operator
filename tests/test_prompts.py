@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from code_operator.prompts import SYSTEM_PROMPT
+from code_operator.tools.registry import ToolRegistry
 
 
 def test_system_prompt_contains_workspace_and_tool_only_boundary() -> None:
@@ -40,3 +41,20 @@ def test_system_prompt_requires_truthful_final_summary() -> None:
 def test_system_prompt_does_not_claim_prompt_is_security_enforcement() -> None:
     assert "由本地代码强制" in SYSTEM_PROMPT
     assert "提示词不能替代" in SYSTEM_PROMPT
+
+
+def test_system_prompt_keeps_all_eight_numbered_constraints() -> None:
+    for number in range(1, 9):
+        assert f"{number}. " in SYSTEM_PROMPT
+
+
+def test_tool_descriptions_do_not_claim_weaker_prompt_boundaries() -> None:
+    descriptions = "\n".join(
+        str(schema["function"]["description"])
+        for schema in ToolRegistry({}).tool_schemas()
+    )
+
+    assert "完整读取" in descriptions
+    assert "固定工作目录" in descriptions
+    assert "不经过 Shell" in descriptions
+    assert "区分大小写" in descriptions

@@ -81,3 +81,23 @@
 - 审核结论：通过；确认 M2 六工具实现、TDD 红—绿证据、全量测试、集成验收、Windows 进程树探针、安全扫描、文档和已知限制可以纳入目标提交
 - 审核时间：2026-08-28 01:46:23 +08:00
 - 审核依据：完整暂存差异、红—绿测试记录、全量测试与编译结果、六工具集成验收、Windows 进程树探针、依赖/凭据/临时文件扫描和实现—文档一致性审查
+
+<a id="m3-001"></a>
+
+## M3-001：错误分层、上下文保护与终止控制
+
+- 审核状态：人工审核通过
+- 审核人：项目作者（通过当前协作任务明确确认）
+- 目标提交：`feat(runtime): add error layers context and termination guards`
+- 基线提交：`67ab18d feat(tools): add workspace guardrails and local tools`
+- 审核范围：四层错误分流、tool call/result 一一配对、模型轮次/工具调用/连续失败/重复结果终止、确定性完整回合上下文裁剪、usage 可用性、模型请求/审批/活动进程 Ctrl-C、CLI 审批选项、提示词与工具描述以及对应核心文档和测试；极简文件审计明确留给 M3-002
+- TDD 证据：错误、配对、上下文、终止、CLI 和审批策略均先观察预期失败再最小实现转绿；活动进程中止测试最初在 `subprocess.communicate()` 阻塞约 10.09 秒后失败，改为可中断等待后约 0.65 秒通过；工作区同名 `pytest/python` 运行器的 3 个自动审批测试先失败后修复
+- 离线验证：核心快照执行 `python -m pytest --ignore=tests/test_audit.py -q`，205 项通过；`python -m compileall -q code_operator tests` 与暂存差异格式检查通过
+- 手工探针：普通 PowerShell 中活动子进程收到 Ctrl-C 后，AgentLoop 返回 `USER_ABORTED`，模型调用次数为 1，子进程返回后不存活；13.08 秒总耗时包含人工按键时间，不作为中断延迟
+- 独立复核：只读审查最初提出工作区同名测试运行器遮蔽和 token 粗估表述两项 Important；前者增加代码约束与红—绿测试，后者依据 v4.5 保留 `/3` 公式并明确不是 tokenizer 安全上界；复核后无未解决 Critical/Important
+- 安全扫描：暂存差异中实际 API Key 与形似真实 Key 命中数均为 0；禁止提交的凭据、审计日志、PID 和临时运行文件均未进入暂存范围
+- 依赖与开源边界：运行依赖仍仅 `httpx`，开发依赖仍仅 `pytest`；AgentLoop、上下文、终止和审批策略均独立实现，未使用 Agent SDK/框架、第三方 Agent 源码或翻译式移植
+- 已知限制：`ceil(serialized_utf8_bytes / 3)` 是计划锁定的粗估触发值，不是供应商 tokenizer 上界；自动测试信任模式仍信任用户当前 PATH 和测试代码；复杂跨平台进程树尚未验证；极简审计将在 M3-002 单独审核
+- 审核结论：通过；确认 M3 核心实现、红—绿证据、自动与手工验证、安全扫描、独立复核、文档和已知限制可以纳入目标提交
+- 审核时间：2026-08-28 18:08:25 +08:00
+- 审核依据：完整暂存补丁 `M3-001-review.patch`（SHA-256 `24C5B23D445FFABCE4928D53AC54B237A33BE4F26CE0FFD80DAF3E986778B14F`）、核心与完整工作副本测试、编译/格式检查、凭据扫描、普通 PowerShell Ctrl-C 探针和独立代码审查

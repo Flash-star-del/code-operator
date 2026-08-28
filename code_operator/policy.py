@@ -87,9 +87,40 @@ class CommandPolicy:
         workspace: str | os.PathLike[str],
         *,
         approve: ApprovalCallback | None = None,
+        ask_all: bool = False,
+        auto_approve_tests: bool = False,
     ) -> None:
         self.workspace = Path(workspace).resolve(strict=True)
         self._approve = approve or (lambda _argv, _cwd: False)
+        self._ask_all = ask_all
+        self._auto_approve_tests = auto_approve_tests
+
+    @staticmethod
+    def _is_test_command(argv: Sequence[str]) -> bool:
+        if not argv:
+            return False
+        program = Path(argv[0]).name.casefold()
+        if program.endswith(".exe"):
+            program = program[:-4]
+        lowered = [item.casefold() for item in argv[1:]]
+        if program == "pytest":
+            return True
+        return program in {"python", "python3", "py"} and lowered[:2] == [
+            "-m",
+            "pytest",
+        ]
+
+    def _is_unshadowed_bare_runner(self, argv: Sequence[str]) -> bool:
+        raw_program = Path(argv[0])
+        if raw_program.name != argv[0]:
+            return False
+        names = {raw_program.name}
+        if not raw_program.suffix:
+            names.update(
+                f"{raw_program.name}{suffix}"
+                for suffix in (".com", ".exe", ".bat", ".cmd")
+            )
+        return not any((self.workspace / name).is_file() for name in names)
 
     def classify(self, argv: Sequence[str]) -> CommandDecision:
         if not argv:
@@ -188,6 +219,20 @@ class CommandPolicy:
 
     def approve(self, argv: Sequence[str]) -> CommandDecision:
         decision = self.classify(argv)
+        if decision is CommandDecision.DENY:
+            return decision
+        if self._ask_all:
+            return (
+                CommandDecision.ALLOW
+                if self._approve(list(argv), self.workspace)
+                else CommandDecision.ASK
+            )
+        if (
+            self._auto_approve_tests
+            and self._is_test_command(argv)
+            and self._is_unshadowed_bare_runner(argv)
+        ):
+            return CommandDecision.ALLOW
         if decision is CommandDecision.ASK:
             return (
                 CommandDecision.ALLOW

@@ -1,14 +1,19 @@
 from __future__ import annotations
 
 import json
-import math
 from collections.abc import Mapping, Sequence
 from typing import Protocol
 
 from code_operator.client import ProviderError, ProviderProtocolError
+from code_operator.config import DEFAULT_CONTEXT_WINDOW, DEFAULT_MAX_OUTPUT_TOKENS
+from code_operator.context import ContextLimitError, ContextManager
 from code_operator.models import AssistantTurn, RunResult, ToolResult
 from code_operator.prompts import SYSTEM_PROMPT
 from code_operator.tools.registry import ToolProtocolError, ToolRegistry
+
+
+MAX_CONSECUTIVE_TOOL_FAILURES = 5
+MAX_REPEATED_CALL_RESULTS = 3
 
 
 class ModelLike(Protocol):
@@ -19,9 +24,22 @@ class ModelLike(Protocol):
     ) -> AssistantTurn: ...
 
 
-def _estimated_tokens(messages: Sequence[Mapping[str, object]]) -> int:
-    serialized = json.dumps(messages, ensure_ascii=False, separators=(",", ":"))
-    return math.ceil(len(serialized.encode("utf-8")) / 3)
+def _call_result_signature(
+    call_name: str,
+    arguments_raw: str,
+    result_content: str,
+) -> tuple[str, str, str]:
+    try:
+        arguments = json.loads(arguments_raw)
+        normalized_arguments = json.dumps(
+            arguments,
+            ensure_ascii=False,
+            sort_keys=True,
+            separators=(",", ":"),
+        )
+    except (json.JSONDecodeError, TypeError):
+        normalized_arguments = arguments_raw
+    return call_name, normalized_arguments, result_content
 
 
 class AgentLoop:
@@ -32,6 +50,8 @@ class AgentLoop:
         *,
         max_model_rounds: int = 16,
         max_tool_calls: int = 32,
+        context_window: int = DEFAULT_CONTEXT_WINDOW,
+        max_output_tokens: int = DEFAULT_MAX_OUTPUT_TOKENS,
         system_prompt: str = SYSTEM_PROMPT,
     ) -> None:
         self._client = client
@@ -39,6 +59,10 @@ class AgentLoop:
         self._max_model_rounds = max_model_rounds
         self._max_tool_calls = max_tool_calls
         self._system_prompt = system_prompt
+        self._context_manager = ContextManager(
+            context_window=context_window,
+            max_output_tokens=max_output_tokens,
+        )
 
     def run(self, user_task: str) -> RunResult:
         messages: list[dict[str, object]] = [
@@ -49,22 +73,38 @@ class AgentLoop:
         tool_call_count = 0
         provider_tokens = 0
         provider_usage_complete = True
+        consecutive_tool_failures = 0
+        previous_call_result: tuple[str, str, str] | None = None
+        repeated_call_results = 0
+        tool_schemas = self._registry.tool_schemas()
 
         def result(status: str, final_text: str = "") -> RunResult:
-            return RunResult(
+            run_result = RunResult(
                 status=status,
                 final_text=final_text,
                 model_rounds=model_rounds,
                 tool_calls=tool_call_count,
                 provider_total_tokens=(
-                    provider_tokens if provider_usage_complete else None
+                    provider_tokens
+                    if provider_usage_complete and model_rounds > 0
+                    else None
                 ),
-                estimated_context_tokens=_estimated_tokens(messages),
+                estimated_context_tokens=self._context_manager.estimate_tokens(
+                    messages, tool_schemas
+                ),
             )
+            return run_result
 
         for _ in range(self._max_model_rounds):
             try:
-                turn = self._client.complete(messages, self._registry.tool_schemas())
+                prepared = self._context_manager.prepare(messages, tool_schemas)
+            except ContextLimitError:
+                return result("CONTEXT_LIMIT")
+            messages = prepared.messages
+            try:
+                turn = self._client.complete(messages, tool_schemas)
+            except KeyboardInterrupt:
+                return result("USER_ABORTED")
             except ProviderProtocolError:
                 return result("PROVIDER_PROTOCOL_ERROR")
             except ProviderError:
@@ -92,22 +132,53 @@ class AgentLoop:
                 else:
                     try:
                         failures = self._registry.execute_calls(turn.tool_calls)
+                    except KeyboardInterrupt:
+                        return result("USER_ABORTED")
                     except ToolProtocolError:
                         return result("PROVIDER_PROTOCOL_ERROR")
                 tool_call_count += len(turn.tool_calls)
-                for tool_result in failures:
+                repeated_limit_reached = False
+                failure_limit_reached = False
+                for call, tool_result in zip(turn.tool_calls, failures, strict=True):
+                    result_content = tool_result.to_message_content()
                     messages.append(
                         {
                             "role": "tool",
                             "tool_call_id": tool_result.tool_call_id,
                             "name": tool_result.name,
-                            "content": tool_result.to_message_content(),
+                            "content": result_content,
                         }
                     )
                     if tool_result.error_code == "USER_ABORTED":
                         return result("USER_ABORTED")
+                    if tool_result.ok:
+                        consecutive_tool_failures = 0
+                    else:
+                        consecutive_tool_failures += 1
+                        if (
+                            consecutive_tool_failures
+                            >= MAX_CONSECUTIVE_TOOL_FAILURES
+                        ):
+                            failure_limit_reached = True
+
+                    signature = _call_result_signature(
+                        call.name,
+                        call.arguments_raw,
+                        result_content,
+                    )
+                    if signature == previous_call_result:
+                        repeated_call_results += 1
+                    else:
+                        previous_call_result = signature
+                        repeated_call_results = 1
+                    if repeated_call_results >= MAX_REPEATED_CALL_RESULTS:
+                        repeated_limit_reached = True
                 if any(item.error_code == "TOOL_CALL_LIMIT" for item in failures):
                     return result("TOOL_CALL_LIMIT")
+                if repeated_limit_reached:
+                    return result("REPEATED_CALL")
+                if failure_limit_reached:
+                    return result("CONSECUTIVE_TOOL_FAILURES")
                 continue
 
             if turn.finish_reason == "length":

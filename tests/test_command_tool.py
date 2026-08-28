@@ -1,8 +1,10 @@
 from __future__ import annotations
 
+import _thread
 import json
 import os
 import sys
+import threading
 import time
 from pathlib import Path
 
@@ -107,6 +109,54 @@ def test_timeout_closes_parent_and_child_output_handles_promptly(tmp_path: Path)
     assert result.error_code == "COMMAND_TIMEOUT"
     assert result.details["timed_out"] is True
     assert elapsed < 5
+
+
+def test_process_interrupted_by_console_signal_is_user_aborted(tmp_path: Path) -> None:
+    if os.name == "nt":
+        interrupt_code = (
+            "import ctypes; "
+            "ctypes.windll.kernel32.ExitProcess(0xC000013A)"
+        )
+    else:
+        interrupt_code = (
+            "import os, signal; os.kill(os.getpid(), signal.SIGINT)"
+        )
+
+    result = run_command(
+        tool_call_id="signal-abort",
+        argv=[sys.executable, "-c", interrupt_code],
+        timeout_seconds=10,
+        policy=approved_policy(tmp_path),
+        redactor=Redactor([]),
+        environment=os.environ,
+    )
+
+    assert result.error_code == "USER_ABORTED"
+    assert result.details["timed_out"] is False
+
+
+def test_main_interpreter_interrupt_stops_active_process_promptly(
+    tmp_path: Path,
+) -> None:
+    timer = threading.Timer(0.2, _thread.interrupt_main)
+    started = time.monotonic()
+    timer.start()
+    try:
+        result = run_command(
+            tool_call_id="active-interrupt",
+            argv=[sys.executable, "-c", "import time; time.sleep(10)"],
+            timeout_seconds=10,
+            policy=approved_policy(tmp_path),
+            redactor=Redactor([]),
+            environment=os.environ,
+        )
+    finally:
+        timer.cancel()
+    elapsed = time.monotonic() - started
+
+    assert result.error_code == "USER_ABORTED"
+    assert result.details["timed_out"] is False
+    assert elapsed < 3
 
 
 def test_user_aborted_tool_stops_loop_before_another_model_request() -> None:

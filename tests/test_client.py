@@ -271,3 +271,38 @@ def test_401_is_not_retried_and_error_never_contains_key_or_response_body() -> N
     assert attempts == 1
     assert captured.value.status_code == 401
     assert "private-test-key" not in str(captured.value)
+
+
+def test_connection_error_retries_twice_then_returns_transport_error() -> None:
+    attempts = 0
+    sleeps: list[float] = []
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        nonlocal attempts
+        attempts += 1
+        raise httpx.ConnectError("offline", request=request)
+
+    client = client_for_handler(handler, sleeps=sleeps)
+
+    with pytest.raises(ProviderHTTPError) as captured:
+        client.complete([], [])
+
+    assert attempts == 3
+    assert sleeps == [0.5, 1.0]
+    assert captured.value.status_code is None
+
+
+def test_protocol_error_after_successful_http_is_never_retried() -> None:
+    attempts = 0
+
+    def handler(_: httpx.Request) -> httpx.Response:
+        nonlocal attempts
+        attempts += 1
+        return httpx.Response(200, json={"choices": []})
+
+    client = client_for_handler(handler)
+
+    with pytest.raises(ProviderProtocolError):
+        client.complete([], [])
+
+    assert attempts == 1

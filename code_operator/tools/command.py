@@ -3,6 +3,8 @@ from __future__ import annotations
 import os
 import signal
 import subprocess
+import threading
+import time
 from collections.abc import Mapping, Sequence
 
 from code_operator.models import ToolResult
@@ -11,6 +13,14 @@ from code_operator.redaction import Redactor, sanitized_subprocess_environment
 
 
 MAX_TOOL_OUTPUT_CHARS = 12_000
+_INTERRUPT_EXIT_CODES = {
+    -int(signal.SIGINT),
+    128 + int(signal.SIGINT),
+    -1_073_741_510,
+    3_221_225_786,
+}
+_INTERRUPT_POLL_SECONDS = 0.1
+_TERMINATION_OUTPUT_WAIT_SECONDS = 5.0
 
 
 def _truncate(text: str, limit: int = MAX_TOOL_OUTPUT_CHARS) -> tuple[str, bool]:
@@ -21,6 +31,49 @@ def _truncate(text: str, limit: int = MAX_TOOL_OUTPUT_CHARS) -> tuple[str, bool]
     head = remaining // 2
     tail = remaining - head
     return text[:head] + marker + text[-tail:], True
+
+
+def _is_interrupt_exit_code(exit_code: int | None) -> bool:
+    return exit_code in _INTERRUPT_EXIT_CODES
+
+
+class _ProcessCommunication:
+    def __init__(self, process: subprocess.Popen[str]) -> None:
+        self._process = process
+        self._done = threading.Event()
+        self._output: tuple[str, str] | None = None
+        self._error: BaseException | None = None
+        self._thread = threading.Thread(target=self._collect, daemon=True)
+        self._thread.start()
+
+    def _collect(self) -> None:
+        try:
+            self._output = self._process.communicate()
+        except BaseException as error:
+            self._error = error
+        finally:
+            self._done.set()
+
+    def wait(self, timeout_seconds: int) -> tuple[str, str]:
+        deadline = time.monotonic() + timeout_seconds
+        while not self._done.is_set():
+            remaining = deadline - time.monotonic()
+            if remaining <= 0:
+                raise subprocess.TimeoutExpired(self._process.args, timeout_seconds)
+            self._done.wait(min(_INTERRUPT_POLL_SECONDS, remaining))
+        return self._result()
+
+    def finish_after_termination(self) -> tuple[str, str]:
+        if not self._done.wait(_TERMINATION_OUTPUT_WAIT_SECONDS):
+            return "", ""
+        return self._result()
+
+    def _result(self) -> tuple[str, str]:
+        if self._error is not None:
+            raise self._error
+        if self._output is None:
+            return "", ""
+        return self._output
 
 
 def _terminate_process_tree(process: subprocess.Popen[str]) -> None:
@@ -110,12 +163,14 @@ def run_command(
         popen_kwargs["start_new_session"] = True
 
     process: subprocess.Popen[str] | None = None
+    communication: _ProcessCommunication | None = None
     try:
         process = subprocess.Popen(argv, **popen_kwargs)
-        stdout, stderr = process.communicate(timeout=timeout_seconds)
+        communication = _ProcessCommunication(process)
+        stdout, stderr = communication.wait(timeout_seconds)
         exit_code = process.poll()
         timed_out = False
-        aborted = False
+        aborted = _is_interrupt_exit_code(exit_code)
     except subprocess.TimeoutExpired:
         if process is None:
             return _failure(
@@ -126,7 +181,11 @@ def run_command(
                 redactor,
             )
         _terminate_process_tree(process)
-        stdout, stderr = process.communicate()
+        stdout, stderr = (
+            communication.finish_after_termination()
+            if communication is not None
+            else ("", "")
+        )
         exit_code = process.poll()
         timed_out = True
         aborted = False
@@ -136,7 +195,11 @@ def run_command(
             exit_code = None
         else:
             _terminate_process_tree(process)
-            stdout, stderr = process.communicate()
+            stdout, stderr = (
+                communication.finish_after_termination()
+                if communication is not None
+                else ("", "")
+            )
             exit_code = process.poll()
         timed_out = False
         aborted = True

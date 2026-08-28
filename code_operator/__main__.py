@@ -30,12 +30,19 @@ def build_registry(
     *,
     approve: ApprovalCallback,
     environment: Mapping[str, str] | None = None,
+    ask_all: bool = False,
+    auto_approve_tests: bool = False,
 ) -> ToolRegistry:
     workspace_policy = WorkspacePolicy(workspace)
     redactor = Redactor([config.api_key])
     file_tools = FileTools(workspace_policy, redactor=redactor)
     search_tools = SearchTools(workspace_policy, redactor=redactor)
-    command_policy = CommandPolicy(workspace_policy.workspace, approve=approve)
+    command_policy = CommandPolicy(
+        workspace_policy.workspace,
+        approve=approve,
+        ask_all=ask_all,
+        auto_approve_tests=auto_approve_tests,
+    )
     source_environment = os.environ if environment is None else environment
 
     def command_handler(
@@ -73,12 +80,16 @@ def run_task(
     approve: ApprovalCallback,
     client: ModelLike | None = None,
     environment: Mapping[str, str] | None = None,
+    ask_all: bool = False,
+    auto_approve_tests: bool = False,
 ) -> RunResult:
     registry = build_registry(
         config,
         workspace,
         approve=approve,
         environment=environment,
+        ask_all=ask_all,
+        auto_approve_tests=auto_approve_tests,
     )
     owned_client = ModelClient(config) if client is None else None
     selected_client = owned_client if owned_client is not None else client
@@ -90,6 +101,8 @@ def run_task(
             registry,
             max_model_rounds=config.max_model_rounds,
             max_tool_calls=config.max_tool_calls,
+            context_window=config.context_window,
+            max_output_tokens=config.max_output_tokens,
         ).run(task)
     finally:
         if owned_client is not None:
@@ -115,6 +128,17 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--max-output-tokens", type=int)
     parser.add_argument("--max-model-rounds", type=int)
     parser.add_argument("--max-tool-calls", type=int)
+    approval = parser.add_mutually_exclusive_group()
+    approval.add_argument(
+        "--ask-all",
+        action="store_true",
+        help="所有未被安全策略拒绝的命令都要求人工批准",
+    )
+    approval.add_argument(
+        "--auto-approve-tests",
+        action="store_true",
+        help="只自动批准 pytest 或 python -m pytest",
+    )
     return parser
 
 
@@ -123,6 +147,8 @@ def main(argv: Sequence[str] | None = None) -> int:
     task = " ".join(args.task).strip()
     if not task:
         task = input("请输入编码任务：").strip()
+    if task.casefold() == "/exit":
+        return 0
     if not task:
         print("任务不能为空。", file=sys.stderr)
         return 2
@@ -138,6 +164,8 @@ def main(argv: Sequence[str] | None = None) -> int:
             workspace=args.workspace,
             task=task,
             approve=_interactive_approval,
+            ask_all=args.ask_all,
+            auto_approve_tests=args.auto_approve_tests,
         )
     except (ConfigError, PathPolicyError) as error:
         print(str(error), file=sys.stderr)
@@ -153,6 +181,7 @@ def main(argv: Sequence[str] | None = None) -> int:
         print("供应商用量不完整")
     else:
         print(f"供应商总 token={result.provider_total_tokens}")
+    print(f"本地估算 token={result.estimated_context_tokens}（非供应商真实用量）")
     if result.status == "COMPLETED":
         return 0
     if result.status == "USER_ABORTED":

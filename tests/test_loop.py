@@ -3,6 +3,8 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
+import pytest
+
 from code_operator.__main__ import build_registry, run_task
 from code_operator.config import ProviderConfig
 from code_operator.loop import AgentLoop
@@ -306,3 +308,325 @@ def test_cli_registry_configures_all_six_tool_handlers(tmp_path: Path) -> None:
 
     assert [result.ok for result in results] == [True, True, True, True]
     assert target.read_text(encoding="utf-8") == "value = 2\n"
+
+
+def test_repeated_call_stops_after_third_equal_result() -> None:
+    calls = [
+        ToolCall(
+            id=f"repeat-{index}",
+            name="list_dir",
+            arguments_raw='{"path":"."}',
+        )
+        for index in range(3)
+    ]
+    model = FakeModelClient(
+        [
+            turn(calls=[call], finish_reason="tool_calls")
+            for call in calls
+        ]
+        + [AssertionError("第三次相同调用结果后不得再次请求模型")]
+    )
+
+    def repeated_handler(*, tool_call_id: str, **_: object) -> ToolResult:
+        return ToolResult(
+            tool_call_id=tool_call_id,
+            name="list_dir",
+            ok=True,
+            error_code=None,
+            message="same",
+            details={"text": "same"},
+        )
+
+    result = AgentLoop(
+        model, ToolRegistry({"list_dir": repeated_handler})
+    ).run("inspect")
+
+    assert result.status == "REPEATED_CALL"
+    assert result.model_rounds == 3
+    assert result.tool_calls == 3
+    assert len(model.calls) == 3
+
+
+def test_five_consecutive_tool_failures_stop_before_next_model_request() -> None:
+    calls = [
+        ToolCall(
+            id=f"failure-{index}",
+            name="read_file",
+            arguments_raw=json.dumps({"path": f"missing-{index}.txt"}),
+        )
+        for index in range(5)
+    ]
+    model = FakeModelClient(
+        [
+            turn(calls=[call], finish_reason="tool_calls")
+            for call in calls
+        ]
+        + [AssertionError("连续五次失败后不得再次请求模型")]
+    )
+
+    def failing_handler(*, tool_call_id: str, path: str, **_: object) -> ToolResult:
+        return ToolResult(
+            tool_call_id=tool_call_id,
+            name="read_file",
+            ok=False,
+            error_code="FILE_NOT_FOUND",
+            message="missing",
+            details={"path": path},
+        )
+
+    result = AgentLoop(
+        model, ToolRegistry({"read_file": failing_handler})
+    ).run("inspect")
+
+    assert result.status == "CONSECUTIVE_TOOL_FAILURES"
+    assert result.model_rounds == 5
+    assert result.tool_calls == 5
+    assert len(model.calls) == 5
+
+
+def test_multi_call_turn_returns_exactly_one_result_for_each_failure_kind() -> None:
+    calls = [
+        ToolCall("ok", "list_dir", "{}"),
+        ToolCall("bad", "write_file", "{"),
+        ToolCall("denied", "run_command", '{"argv":["python","script.py"]}'),
+        ToolCall("unknown", "not_registered", "{}"),
+    ]
+    model = FakeModelClient(
+        [
+            turn(calls=calls, finish_reason="tool_calls"),
+            turn(content="handled"),
+        ]
+    )
+
+    def list_handler(*, tool_call_id: str, **_: object) -> ToolResult:
+        return ToolResult(
+            tool_call_id=tool_call_id,
+            name="list_dir",
+            ok=True,
+            error_code=None,
+            message="listed",
+            details={},
+        )
+
+    def denied_handler(*, tool_call_id: str, **_: object) -> ToolResult:
+        return ToolResult(
+            tool_call_id=tool_call_id,
+            name="run_command",
+            ok=False,
+            error_code="COMMAND_DENIED",
+            message="denied",
+            details={},
+        )
+
+    result = AgentLoop(
+        model,
+        ToolRegistry(
+            {"list_dir": list_handler, "run_command": denied_handler}
+        ),
+    ).run("inspect")
+
+    tool_messages = [
+        message for message in model.calls[1][0] if message.get("role") == "tool"
+    ]
+    assert result.status == "COMPLETED"
+    assert [message["tool_call_id"] for message in tool_messages] == [
+        "ok",
+        "bad",
+        "denied",
+        "unknown",
+    ]
+    assert [
+        json.loads(str(message["content"]))["error_code"]
+        for message in tool_messages
+    ] == [None, "INVALID_ARGUMENTS", "COMMAND_DENIED", "UNKNOWN_TOOL"]
+
+
+def test_tool_budget_exhaustion_still_pairs_every_call_in_turn(
+    monkeypatch,
+) -> None:
+    calls = [
+        ToolCall(f"limit-{index}", "list_dir", "{}")
+        for index in range(3)
+    ]
+    model = FakeModelClient([turn(calls=calls, finish_reason="tool_calls")])
+    paired_ids: list[str] = []
+    original_to_message_content = ToolResult.to_message_content
+
+    def recording_content(tool_result: ToolResult) -> str:
+        paired_ids.append(tool_result.tool_call_id)
+        return original_to_message_content(tool_result)
+
+    monkeypatch.setattr(ToolResult, "to_message_content", recording_content)
+
+    result = AgentLoop(
+        model,
+        ToolRegistry({}),
+        max_tool_calls=1,
+    ).run("inspect")
+
+    assert result.status == "TOOL_CALL_LIMIT"
+    assert result.tool_calls == 3
+    assert paired_ids == ["limit-0", "limit-1", "limit-2"]
+
+
+class InterruptingModel:
+    def __init__(self) -> None:
+        self.calls = 0
+
+    def complete(self, *_: object) -> AssistantTurn:
+        self.calls += 1
+        raise KeyboardInterrupt
+
+
+def test_ctrl_c_during_model_request_returns_user_aborted() -> None:
+    model = InterruptingModel()
+
+    result = AgentLoop(model, ToolRegistry({})).run("inspect")
+
+    assert result.status == "USER_ABORTED"
+    assert result.model_rounds == 0
+    assert model.calls == 1
+
+
+def test_ctrl_c_during_tool_approval_returns_user_aborted() -> None:
+    call = ToolCall("approval", "run_command", '{"argv":["python","script.py"]}')
+    model = FakeModelClient(
+        [
+            turn(calls=[call], finish_reason="tool_calls"),
+            AssertionError("审批中止后不得再次请求模型"),
+        ]
+    )
+
+    def interrupting_handler(**_: object) -> ToolResult:
+        raise KeyboardInterrupt
+
+    result = AgentLoop(
+        model,
+        ToolRegistry({"run_command": interrupting_handler}),
+    ).run("run")
+
+    assert result.status == "USER_ABORTED"
+    assert result.model_rounds == 1
+    assert len(model.calls) == 1
+
+
+def test_context_limit_stops_before_any_model_request() -> None:
+    model = FakeModelClient([AssertionError("上下文超限时不得请求模型")])
+
+    result = AgentLoop(
+        model,
+        ToolRegistry({}),
+        context_window=400,
+        max_output_tokens=200,
+        system_prompt="short system",
+    ).run("x" * 2_000)
+
+    assert result.status == "CONTEXT_LIMIT"
+    assert result.model_rounds == 0
+    assert result.provider_total_tokens is None
+    assert len(model.calls) == 0
+
+
+def test_run_task_passes_provider_context_limits_to_loop(tmp_path: Path) -> None:
+    model = FakeModelClient([AssertionError("配置的上下文上限必须在请求前生效")])
+    config = ProviderConfig(
+        api_key="private",
+        base_url="https://provider.example/v1",
+        model="test-model",
+        context_window=400,
+        max_output_tokens=200,
+    )
+
+    result = run_task(
+        config,
+        workspace=tmp_path,
+        task="x" * 2_000,
+        approve=lambda _argv, _cwd: False,
+        client=model,
+        environment={},
+    )
+
+    assert result.status == "CONTEXT_LIMIT"
+    assert len(model.calls) == 0
+
+
+def test_default_model_round_limit_is_sixteen() -> None:
+    calls = [
+        ToolCall(
+            f"round-{index}",
+            "read_file",
+            json.dumps({"path": f"file-{index}.txt"}),
+        )
+        for index in range(16)
+    ]
+    model = FakeModelClient(
+        [turn(calls=[call], finish_reason="tool_calls") for call in calls]
+        + [AssertionError("默认 16 轮结束后不得继续请求模型")]
+    )
+
+    def handler(*, tool_call_id: str, path: str, **_: object) -> ToolResult:
+        return ToolResult(
+            tool_call_id=tool_call_id,
+            name="read_file",
+            ok=True,
+            error_code=None,
+            message="read",
+            details={"path": path},
+        )
+
+    result = AgentLoop(
+        model, ToolRegistry({"read_file": handler})
+    ).run("inspect")
+
+    assert result.status == "MODEL_ROUND_LIMIT"
+    assert result.model_rounds == 16
+    assert len(model.calls) == 16
+
+
+def test_content_filter_is_a_terminal_non_success_state() -> None:
+    model = FakeModelClient(
+        [turn(content="partial", finish_reason="content_filter")]
+    )
+
+    result = AgentLoop(model, ToolRegistry({})).run("task")
+
+    assert result.status == "CONTENT_FILTERED"
+    assert result.final_text == "partial"
+
+
+@pytest.mark.parametrize(
+    "error_code",
+    ["PATH_DENIED", "COMMAND_FAILED", "COMMAND_TIMEOUT"],
+)
+def test_local_execution_errors_are_replayed_with_original_call_id(
+    error_code: str,
+) -> None:
+    call = ToolCall("local-error", "read_file", '{"path":"sample.txt"}')
+    model = FakeModelClient(
+        [
+            turn(calls=[call], finish_reason="tool_calls"),
+            turn(content="corrected"),
+        ]
+    )
+
+    def handler(*, tool_call_id: str, **_: object) -> ToolResult:
+        return ToolResult(
+            tool_call_id=tool_call_id,
+            name="read_file",
+            ok=False,
+            error_code=error_code,
+            message="recoverable",
+            details={},
+        )
+
+    result = AgentLoop(
+        model, ToolRegistry({"read_file": handler})
+    ).run("inspect")
+
+    tool_messages = [
+        item for item in model.calls[1][0] if item.get("role") == "tool"
+    ]
+    assert result.status == "COMPLETED"
+    assert len(tool_messages) == 1
+    assert tool_messages[0]["tool_call_id"] == "local-error"
+    assert json.loads(str(tool_messages[0]["content"]))["error_code"] == error_code

@@ -136,6 +136,91 @@ def test_execution_policy_exposes_canonical_resolved_workspace_path(
 
 
 @pytest.mark.parametrize(
+    "argv",
+    [
+        ["pytest"],
+        ["pytest", "-q", "tests/test_policy.py"],
+        ["python", "-m", "pytest"],
+        ["python", "-m", "pytest", "-q"],
+    ],
+)
+def test_auto_approve_tests_only_allows_pytest_forms(
+    tmp_path: Path, argv: list[str]
+) -> None:
+    approvals: list[list[str]] = []
+    policy = CommandPolicy(
+        tmp_path,
+        approve=lambda command, _cwd: approvals.append(command) or False,
+        auto_approve_tests=True,
+    )
+
+    assert policy.approve(argv) is CommandDecision.ALLOW
+    assert approvals == []
+
+
+@pytest.mark.parametrize(
+    "argv",
+    [
+        ["python", "script.py"],
+        ["python", "-m", "pip", "install", "package"],
+        ["python", "-m", "unittest"],
+        ["pip", "install", "package"],
+    ],
+)
+def test_auto_approve_tests_never_allows_other_python_or_install_commands(
+    tmp_path: Path, argv: list[str]
+) -> None:
+    approvals: list[list[str]] = []
+    policy = CommandPolicy(
+        tmp_path,
+        approve=lambda command, _cwd: approvals.append(command) or False,
+        auto_approve_tests=True,
+    )
+
+    assert policy.approve(argv) is CommandDecision.ASK
+    assert approvals == [argv]
+
+
+@pytest.mark.parametrize(
+    ("shadow_name", "argv"),
+    [
+        ("pytest.exe", ["pytest", "-q"]),
+        ("python.exe", ["python", "-m", "pytest", "-q"]),
+        ("pytest", ["./pytest", "-q"]),
+    ],
+)
+def test_auto_approve_tests_requires_unshadowed_bare_runner(
+    tmp_path: Path,
+    shadow_name: str,
+    argv: list[str],
+) -> None:
+    (tmp_path / shadow_name).write_text("untrusted runner", encoding="utf-8")
+    approvals: list[list[str]] = []
+    policy = CommandPolicy(
+        tmp_path,
+        approve=lambda command, _cwd: approvals.append(command) or False,
+        auto_approve_tests=True,
+    )
+
+    assert policy.approve(argv) is CommandDecision.ASK
+    assert approvals == [argv]
+
+
+def test_ask_all_routes_normally_allowed_command_through_approval(
+    tmp_path: Path,
+) -> None:
+    approvals: list[list[str]] = []
+    policy = CommandPolicy(
+        tmp_path,
+        approve=lambda command, _cwd: approvals.append(command) or False,
+        ask_all=True,
+    )
+
+    assert policy.approve(["git", "status", "--short"]) is CommandDecision.ASK
+    assert approvals == [["git", "status", "--short"]]
+
+
+@pytest.mark.parametrize(
     ("argv", "decision"),
     [
         (["git", "status", "--short"], CommandDecision.ALLOW),
@@ -181,15 +266,15 @@ class FakeProcess:
     def __init__(self) -> None:
         self.pid = 1234
 
-    def communicate(self, *, timeout: int) -> tuple[str, str]:
-        assert timeout == 9
+    def communicate(self, timeout: int | None = None) -> tuple[str, str]:
+        assert timeout is None
         return ("output current-key", "")
 
     def poll(self) -> int:
         return 0
 
 
-def test_run_command_uses_array_without_shell_fixed_cwd_timeout_and_clean_env(
+def test_run_command_uses_array_without_shell_fixed_cwd_and_clean_env(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     captured: dict[str, object] = {}
