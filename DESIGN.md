@@ -72,6 +72,14 @@ CLI 已提供 `--workspace`、`--ask-all`、`--auto-approve-tests`、`--max-mode
 
 极简审计写入 `.code-operator/audit.jsonl`，只记录 UTC 时间、工具名、最多 500 字符的脱敏参数摘要、`ok/error_code/exit_code`、usage 可用性和停止原因；文件正文参数会替换为长度摘要，非法或非对象 JSON 只记录形态，不记录原文，也不记录完整消息、工具输出或 API Key。日志写入失败不会使 AgentLoop 崩溃，内部目录联接逃逸会被拒绝。M3 当前 211 项离线测试通过；模型请求、审批、进程创建、控制中止退出码和 AgentLoop 停止均有自动化证据。普通 PowerShell 手工 Ctrl-C 探针返回 `status=USER_ABORTED`、`model_calls=1`、`child_alive_after_return=false`；其 13.08 秒总耗时包含看到提示后按键的人工作用时间，因此不作为中断延迟数据，自动化中断测试的返回耗时为 0.65 秒。
 
+## M4 离线集成与真实修复验收
+
+`tests/test_integration_fake_model.py` 通过实际 `run_task`、六工具注册表、AgentLoop 和脚本化供应商响应完成完整闭环：同一轮按顺序读取源码并搜索，第一次修改后运行 pytest 得到真实非零退出码，再修改剩余根因并得到退出码 0，最后才接受模型总结。每一次发给假模型的历史都重新核对 assistant 消息只包含 P0 允许的 `role/content/tool_calls`，`finish_reason/usage/request_id/reasoning_content` 均未回放，所有工具结果按原 ID、原顺序且恰好配对一次。
+
+同一集成文件还覆盖未知工具、坏 arguments、策略拒绝、成功 HTTP 的坏 JSON 不重试、可重试 HTTP 错误恢复、真实命令超时、真实输出截断、只裁剪最旧完整回合和空最终响应。`tests/conftest.py` 会让主 pytest 进程的任何未模拟 socket 连接直接失败；HTTP 测试只使用 `httpx.MockTransport`。Windows/Python 3.11 上源码与测试字节码编译成功，218 项离线测试连续两次分别在 6.37 秒和 6.39 秒内通过。CI 保持 Windows/Python 3.11 为阻塞平台并增加编译步骤；Ubuntu 尚未验证，不宣称跨平台通过。
+
+2026-08-28 的 M4 真实任务在仓库外全新隔离项目上使用 `kimi-k3`。独立前置 pytest 得到 `2 failed, 1 passed`；审计记录的工具序列为 `list_dir -> read_file -> read_file -> run_command(exit 1) -> edit_file -> run_command(exit 0)`，模型没有写入或编辑测试文件。AgentLoop 返回 `COMPLETED`，共 6 轮、6 次工具调用，供应商每轮 usage 均可用并合计 10,890 tokens；随后独立复跑得到 `3 passed`。7 条审计记录中未出现当前 API Key、Authorization 或 Bearer；提交内的脱敏结构化摘要保存于 [`docs/evidence/m4-real-task.json`](docs/evidence/m4-real-task.json)，不含请求 ID、供应商响应正文、工具参数正文或输出。该验收只证明当前 Windows/Python 3.11、单个隔离任务和本次供应商响应；获批测试代码仍不受操作系统沙箱约束，远端 M4 CI 与 `v0.1.0` 标签必须在人工提交审核和推送门禁后另行验证。
+
 ## 开源经验校准与独立实现边界
 
 R0 的固定来源、commit、许可证、阅读文件、采用/拒绝决策和自有测试映射见 [`REFERENCES.md`](REFERENCES.md)。参考项目只帮助识别失败模式，不是运行时依赖或生产代码来源。

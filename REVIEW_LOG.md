@@ -122,3 +122,26 @@
 - 审核结论：通过；确认极简审计实现、红—绿证据、全量验证、隐私边界、安全扫描、文档和已知限制可以纳入目标提交
 - 审核时间：2026-08-28 18:11:23 +08:00
 - 审核依据：完整暂存补丁 `M3-002-review.patch`（SHA-256 `323DD9384BC9BD65952A5D3489D7097C51760536C757DB597D3A75C8F64C139D`）、专项/全量测试、编译/格式检查、凭据扫描和独立代码审查
+
+<a id="m4-001"></a>
+
+## M4-001：离线集成套件与真实任务证据
+
+- 审核状态：人工审核通过
+- 审核人：项目作者（通过当前协作任务明确确认）
+- 目标提交：`test: add offline integration suite and real task evidence`
+- 基线提交：`a2a359c feat(audit): add redacted execution summaries`
+- 审核范围：脚本化假模型完整修复链、逐轮 assistant 回放白名单和 tool ID 配对、坏 JSON/重试/拒绝/超时/截断/裁剪/空响应集成场景、离线 socket 护栏、Windows CI 编译步骤、`kimi-k3` 隔离真实修复的脱敏结构化证据，以及 README、DESIGN 和执行计划中的已验证声明与限制
+- 测试证据：`tests/test_integration_fake_model.py` 7 项通过；`python -m compileall -q code_operator tests` 通过；Windows/Python 3.11 全量 218 项离线测试连续两次为 6.37 秒和 6.39 秒通过，审核前最终复核为 `218 passed in 6.55s`
+- 集成闭环：实际 `run_task` 与六工具按顺序完成读取、搜索、第一次修改、pytest 非零、第二次修改、pytest 为 0 和最终总结；每轮出站历史只含 P0 允许字段，所有工具结果按原 ID、原顺序且恰好配对一次
+- 真实验收：全新仓库外 buggy Python 项目使用 `kimi-k3`；独立初始测试为 `2 failed, 1 passed`，Agent 只修改生产文件，最终独立复跑为 `3 passed`；状态 `COMPLETED`，6 轮、6 次工具调用、供应商 usage 合计 10,890 tokens
+- 脱敏证据：`docs/evidence/m4-real-task.json` 保存平台、文件最终哈希、前后测试摘要、工具序列、轮次、停止原因、usage 及来源；不保存请求 ID、供应商响应正文、原始参数正文或工具输出
+- 独立复核：规格复核发现真实 usage 未随证据保存后已补齐结构化摘要并复核关闭；代码质量复核提出 MockTransport 客户端生命周期和 README 审批例外两项 Minor，修正后再次复核，无未解决 Critical/Important/Minor
+- 安全扫描：实际 API Key 在当前树、暂存差异和 Git 历史中的命中数均为 0；暂存形似真实 Key、凭据、审计日志、缓存、PID 和临时文件名命中数均为 0；历史唯一形似 Key 命中已确认是 `tests/test_client.py` 的合成断言值
+- 依赖与开源边界：未修改生产代码或增加依赖；运行依赖仍仅 `httpx`，开发依赖仍仅 `pytest`；未使用 Agent SDK/框架、第三方 Agent 源码或翻译式移植
+- 已知限制：远端 Windows CI 尚待推送后验证；Ubuntu 未验证；测试网络护栏覆盖 TCP `connect/connect_ex` 而非所有 UDP 路径；获批测试代码仍不构成操作系统沙箱；`v0.1.0` 标签必须等待推送和当前平台 CI 成功
+- 审核结论：通过；确认 M4 本地集成测试、真实任务证据、脱敏边界、文档声明和已知限制可以纳入目标提交；本结论不授权推送或打标签
+- 审核时间：2026-08-28 19:30:34 +08:00
+- 审核依据：完整暂存补丁 `M4-001-review.patch`（SHA-256 `029E337F0B5A6E0AEB9143611AB48B6C0393566CF91DB2DE6782E569B4A1C777`）、全量离线测试与编译结果、真实任务独立前后测试、脱敏审计和结构化证据、凭据扫描以及规格/代码质量两阶段复核
+
+本记录只覆盖上述审核范围，不扩大功能实现、远端推送或标签权限。

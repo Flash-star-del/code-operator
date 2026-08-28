@@ -1,0 +1,57 @@
+{
+  "schema_version": 1,
+  "date": "2026-08-28",
+  "platform": {
+    "os": "Microsoft Windows NT 10.0.26200.0",
+    "python": "3.11.5"
+  },
+  "provider": {
+    "model": "kimi-k3",
+    "response_bodies_saved": false,
+    "request_ids_saved": false
+  },
+  "workspace": {
+    "kind": "fresh isolated buggy Python project outside the repository",
+    "production_file_sha256_after": "2120fd76bd56eb9091ef114868251331ac61fce01357965373f7f62deedae9f8",
+    "test_file_sha256_after": "0f0a5d4a3dc0f361debacfedeee8886d162dc155719afd94f1c05b256e8d9717",
+    "test_file_edit_event": false
+  },
+  "initial_test": {
+    "command": ["python", "-m", "pytest", "-q"],
+    "exit_code": 1,
+    "summary": "2 failed, 1 passed"
+  },
+  "agent_result": {
+    "status": "COMPLETED",
+    "model_rounds": 6,
+    "tool_calls": 6,
+    "provider_total_tokens": 10890,
+    "provider_usage_source": "sum of parsed usage.total_tokens from all successful model rounds"
+  },
+  "tool_summary": [
+    {"tool": "list_dir", "ok": true, "error_code": null, "exit_code": null},
+    {"tool": "read_file", "ok": true, "error_code": null, "exit_code": null},
+    {"tool": "read_file", "ok": true, "error_code": null, "exit_code": null},
+    {"tool": "run_command", "ok": false, "error_code": "COMMAND_FAILED", "exit_code": 1},
+    {"tool": "edit_file", "ok": true, "error_code": null, "exit_code": null},
+    {"tool": "run_command", "ok": true, "error_code": null, "exit_code": 0}
+  ],
+  "final_test": {
+    "command": ["python", "-m", "pytest", "-q"],
+    "exit_code": 0,
+    "summary": "3 passed"
+  },
+  "audit_scan": {
+    "records": 7,
+    "actual_api_key_present": false,
+    "authorization_present": false,
+    "bearer_present": false,
+    "raw_argument_bodies_saved": false,
+    "raw_tool_outputs_saved": false
+  },
+  "verification_scope": {
+    "remote_ci": "pending",
+    "ubuntu": "not verified",
+    "operating_system_sandbox": false
+  }
+}
