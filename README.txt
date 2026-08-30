@@ -12,4 +12,4 @@ Git 仓库地址：https://github.com/Flash-star-del/code-operator
 文件工具限制真实路径并拒绝敏感文件和链接逃逸，以完整读取状态和哈希保护覆盖；命令使用参数数组、固定目录、超时、净化环境和审批。`--auto-approve-tests` 只信任明确的 pytest 命令。这些措施不构成 OS 沙箱，获批代码仍可能访问外部资源。
 
 四、当前状态
-基础版 v0.1.0 已发布；Windows/Python 3.11 当前 240 项离线测试通过。M4 的 kimi-k3 隔离修复为 6 轮、6 次工具调用，测试从 2 失败/1 通过变为 3 通过。Ubuntu 未验证。设计证据见 DESIGN.md、DEFENSE.md 和 REVIEW_LOG.md。
+基础版 v0.1.0 已发布；当前 main 在 Windows/Python 3.11 有 348 项离线测试通过，GitHub Actions offline-tests 通过。固定订单价格流水线在 kimi-k3 的三个全新工作区 3/3 完成，测试哈希不变且只修改 pricing.py 和 invoice.py；这只是一个固定任务的三次样本，不代表整体成功率。CLI 默认显示脱敏、有界并转义终端控制字符的普通终端轨迹。Ubuntu 未验证。详细证据见 DESIGN.md、DEFENSE.md 和 REVIEW_LOG.md。

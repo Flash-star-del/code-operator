@@ -241,4 +241,24 @@
 - 审核时间：2026-08-30 12:12:44 +08:00
 - 审核依据：完整暂存补丁 `E3-001-review.patch`（SHA-256 `A90F5F3B37D9A96D51961960E5531B9CC489E19E8392B09B05B02E1670C5FE34`）、58 项 formatter 测试、105 项定向测试、348 项全量测试、编译与差异检查、凭据/临时文件扫描及两阶段复核
 
+<a id="final-doc-001"></a>
+
+## FINAL-DOC-001：最终提交 README 事实刷新
+
+- 审核状态：人工审核通过
+- 审核人：项目作者（通过当前协作任务明确确认）
+- 目标提交：`docs: refresh final submission readme`
+- 基线提交：`4c65438 feat(cli): clarify terminal execution trace`
+- 审核范围：`README.txt` 已验证状态刷新、最终 README 刷新实施计划，以及仓库外 v4.5 根计划中的 ZIP 预检命令校正；不修改生产代码、测试、依赖或预检脚本
+- 红绿证据：初始事实探针因缺少 348 项、三个全新工作区 3/3 和普通终端轨迹声明而以 `AssertionError`、退出码 1 结束；只替换 README 第四节后探针转绿，前三节与基线完全一致，Python 字符数为 933
+- 本地验证：提交预检专项 22 项通过；完整离线测试 348 项通过；`python -m compileall -q code_operator evals scripts tests`、UTF-8 预检帮助和暂存差异格式检查通过
+- 公开声明边界：README 只增加现有证据支持的 E2/E3 状态，明确固定任务三次样本不代表整体成功率并保留 Ubuntu 未验证；不写姓名、真实凭据、本地绝对路径、视频/ZIP 完成状态或可选 E4/E5
+- 预检命令：根计划改为在已生成 ZIP 上运行 `python -X utf8 scripts/preflight_submission.py --expected-name "<本人中文姓名>" "<本人中文姓名>.zip"`，与实际 argparse 接口一致；姓名继续保留占位符，最终提交复选框未提前完成
+- 独立复核：Task 1 与 Task 2 均通过规格/质量复核；最终组合规格为 `FINAL_DOC_SPEC_APPROVED`，最终组合质量为 `FINAL_DOC_QUALITY_APPROVED`，无未解决 Critical/Important 问题
+- 安全扫描：当前 API Key 精确值、私钥头、Authorization Bearer 值、本地绝对路径和依赖差异命中均为 0；姓名占位符仅出现在预期流程文本
+- 已知限制：尚未执行最终真实 API 演示、完整 Git 历史扫描、模拟答辩、视频录制、ZIP 生成/解压复核或报名系统上传；本审核不将这些事项标记为完成
+- 审核结论：通过；确认上述 README 事实更新、执行记录、验证证据、隐私边界和仓库外预检命令校正可以纳入目标提交；本结论不授权远端推送
+- 审核时间：2026-08-30 15:00:34 +08:00
+- 审核依据：完整暂存补丁 `FINAL-DOC-001-review.patch`（SHA-256 `62D27C92F96175749568357DDC9B9AE25BE4C8E2C679723D9A9D670758724341`）、根计划 SHA-256 `8891970B65961FC190998E09F1071D92718791B70A7193D1CEEF21255A9414D7`、933 字符计数、22 项专项测试、348 项全量测试、编译/差异/隐私扫描及多轮独立复核
+
 本记录只覆盖上述审核范围，不扩大功能实现、远端推送或标签权限。
