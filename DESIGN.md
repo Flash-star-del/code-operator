@@ -90,6 +90,16 @@ E2 使用冻结的订单价格流水线任务：`pricing.py` 负责折扣取整�
 
 首次完整补丁审查发现 harness 的 pytest/Git 子进程未显式净化父进程环境。回归测试先复现合成 Key 可见，再复用 `sanitized_subprocess_environment()` 修复；修复前报告扫描未发现当前 API Key 或禁止字段，但不计入最终结论，原样保留于 [`docs/evidence/e2-golden-eval-pre-env-sanitization.json`](docs/evidence/e2-golden-eval-pre-env-sanitization.json)。修复后所有三次计数从零重新开始。
 
+## E3 普通终端执行轨迹验证
+
+E3 的终端轨迹由独立的 `TerminalTrace` 提供，和写入 `.code-operator/audit.jsonl` 的 `JsonlAudit` 分开注入；CLI 默认启用前者，库调用方可以通过 `trace` 参数选择性提供实现。`AgentLoop` 在三个事件点调用它：模型轮次（轮次、tool call 数和 usage 可用性）、工具执行（工具名、参数摘要、结果状态和错误码）以及整次运行结束（停止原因和 usage 可用性）。轨迹 sink 抛出异常时只标记输出失败并静默后续输出，不改变 AgentLoop 的控制流或结果。
+
+终端参数摘要统一二次脱敏，并按工具类型限制内容：`read_file`、`grep`、`list_dir` 仍显示工具名、脱敏的有界参数摘要、`ok/error_code`，但不显示读取/搜索/目录结果 payload（正文、匹配项、条目）；`write_file`/`edit_file` 仅显示成功后的受限 unified diff；`run_command` 显示 `exit_code`、超时标志以及受限 stdout/stderr。所有不可信展示文本遵循“脱敏、终端安全编码、再按预算截断”的顺序：C0/C1、DEL、Unicode 控制/格式字符及行段分隔符显示为可见转义，只有 diff、stdout/stderr 和最终回答保留普通 LF，工具名、状态、错误、参数摘要和审批元数据保持单行，因此 ANSI/OSC、回车、退格或双向格式字符不能伪造顶层事件和审批标记。过长的有效 JSON 对象参数摘要、diff 和命令流保留头尾并带 `original_chars` 标记；非法或非对象参数只显示形态和长度。进入人工 ASK 的命令由交互回调显示 `ALLOW` 或 `DENY`；自动放行或策略直接拒绝的命令不经过此决策标记。已识别的当前 API Key、Bearer 值和常见凭据会脱敏，但 diff/stdout/stderr 仍需人工检查后再公开；CLI 仍打印最终模型回答。程序不主动持久化 trace，且 trace 与 JSONL audit 相互独立；终端历史、重定向或录屏仍可能保存输出。trace 不展示 reasoning、完整原始消息、request id、已识别凭据的明文或完整日志。
+
+自动化覆盖了三事件点、按工具类型的 payload 省略、二次脱敏、长文本头尾标记、命令退出码/超时/stdout/stderr、usage 不可用、停止原因、sink 失败隔离、CLI 默认传入 trace，以及工具名、状态、参数、diff、命令流、审批信息、最终回答和错误路径中的终端控制字符回归；loop 测试还确认 trace 失败不改变成功执行。2026-08-30 人工预览使用不落盘的 UTF-8 合成文本，并按 100/40 字符宽度用 Python `textwrap` 查看：包含模型事件、长中文路径、超过 4000 字符且保留 `HEAD`/`TAIL` 与 `original_chars=10065` 的 edit diff、`run_command` 的 `exit_code=1`、stdout `3 failed, 2 passed`、中文 stderr，以及通过 `_interactive_approval` 和合成 `patch` 输入得到的真实 `[审批] ALLOW`；argv/cwd 合成 secret 未泄露，结束行保留 `usage=unavailable` 与 `stop_reason=COMPLETED`。未模拟中文双宽显示单元、真实终端编码或实际换行，仅确认关键字段在该合成预览中可按顺序复原。
+
+该界面明确保持普通纯文本边界：无 Rich、ANSI、全屏 TUI、动画、鼠标交互、流式 tool-call 或完整日志展示。上述结果只证明当前 Windows/Python 3.11 的实现与这些自动化/人工样例，不泛化为所有终端兼容性。
+
 ## 提示、工具描述与顺序执行
 
 system prompt 负责跨工具、跨轮次的不变量：先检查再修改、依据真实工具结果继续、测试失败不得宣称完成、遵守审批和路径边界。每个工具的 `description` 只说明该工具的局部用途、参数和输出限制，帮助模型在当前轮选择正确函数。两者不能互相替代：把所有细节塞进 system prompt 会增加上下文并形成重复事实源，只依赖 description 又无法表达跨轮终止和诚实总结。无论哪一层都不是安全边界，路径、参数、审批和终止仍由代码验证。

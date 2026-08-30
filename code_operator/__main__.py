@@ -10,7 +10,7 @@ from pathlib import Path
 from code_operator.audit import JsonlAudit
 from code_operator.client import ModelClient
 from code_operator.config import ConfigError, ProviderConfig, load_provider_config
-from code_operator.loop import AgentLoop, ModelLike
+from code_operator.loop import AgentLoop, ModelLike, TraceLike
 from code_operator.models import RunResult, ToolResult
 from code_operator.policy import (
     ApprovalCallback,
@@ -23,6 +23,7 @@ from code_operator.tools.command import run_command
 from code_operator.tools.filesystem import FileTools
 from code_operator.tools.registry import ToolRegistry
 from code_operator.tools.search import SearchTools
+from code_operator.trace import TerminalTrace, terminal_safe_text
 
 
 def build_registry(
@@ -83,6 +84,7 @@ def run_task(
     environment: Mapping[str, str] | None = None,
     ask_all: bool = False,
     auto_approve_tests: bool = False,
+    trace: TraceLike | None = None,
 ) -> RunResult:
     registry = build_registry(
         config,
@@ -106,18 +108,28 @@ def run_task(
             context_window=config.context_window,
             max_output_tokens=config.max_output_tokens,
             audit=audit,
+            trace=trace,
         ).run(task)
     finally:
         if owned_client is not None:
             owned_client.close()
 
 
-def _interactive_approval(argv: list[str], cwd: Path) -> bool:
+def _interactive_approval(
+    argv: list[str], cwd: Path, *, redactor: Redactor | None = None
+) -> bool:
+    active_redactor = Redactor([]) if redactor is None else redactor
+    redacted_argv = [
+        terminal_safe_text(active_redactor.redact(item)) for item in argv
+    ]
+    redacted_cwd = terminal_safe_text(active_redactor.redact(cwd))
     print("\n命令需要人工批准：")
-    print(f"  参数：{json.dumps(argv, ensure_ascii=False)}")
-    print(f"  工作目录：{cwd}")
+    print(f"  参数：{json.dumps(redacted_argv, ensure_ascii=False)}")
+    print(f"  工作目录：{redacted_cwd}")
     answer = input("仅允许本次执行？[y/N] ").strip().casefold()
-    return answer in {"y", "yes", "允许"}
+    allowed = answer in {"y", "yes", "允许"}
+    print("[审批] ALLOW" if allowed else "[审批] DENY")
+    return allowed
 
 
 def build_parser() -> argparse.ArgumentParser:
@@ -155,6 +167,7 @@ def main(argv: Sequence[str] | None = None) -> int:
     if not task:
         print("任务不能为空。", file=sys.stderr)
         return 2
+    redactor: Redactor | None = None
     try:
         config = load_provider_config(
             context_window=args.context_window,
@@ -162,22 +175,34 @@ def main(argv: Sequence[str] | None = None) -> int:
             max_model_rounds=args.max_model_rounds,
             max_tool_calls=args.max_tool_calls,
         )
+        redactor = Redactor([config.api_key])
+        trace = TerminalTrace(redactor)
         result = run_task(
             config,
             workspace=args.workspace,
             task=task,
-            approve=_interactive_approval,
+            approve=lambda command_argv, command_cwd: _interactive_approval(
+                command_argv, command_cwd, redactor=redactor
+            ),
             ask_all=args.ask_all,
             auto_approve_tests=args.auto_approve_tests,
+            trace=trace,
         )
     except (ConfigError, PathPolicyError) as error:
-        print(str(error), file=sys.stderr)
+        redacted_error = str(error) if redactor is None else redactor.redact(error)
+        print(terminal_safe_text(redacted_error), file=sys.stderr)
         return 2
 
     if result.final_text:
-        print(result.final_text)
+        safe_final_text = terminal_safe_text(
+            redactor.redact(result.final_text), multiline=True
+        )
+        print("[回答]")
+        for line in safe_final_text.split(chr(10)):
+            print(f"  {line}")
+    safe_status = terminal_safe_text(redactor.redact(result.status))
     print(
-        f"状态={result.status} 模型轮次={result.model_rounds} "
+        f"状态={safe_status} 模型轮次={result.model_rounds} "
         f"工具调用={result.tool_calls}"
     )
     if result.provider_total_tokens is None:

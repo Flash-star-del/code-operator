@@ -221,4 +221,24 @@
 - 审核时间：2026-08-29 20:37:25 +08:00
 - 审核依据：项目作者对架构、输出契约、异常/验证设计的逐段批准，以及书面规格文件 SHA-256 `A6AC68BFF65D4CA58E20D3764999FB235E37249B172DB131576B1F5D0E89B3B0` 的最终人工审核确认
 
+<a id="e3-001"></a>
+
+## E3-001：最小普通终端执行轨迹实现
+
+- 审核状态：人工审核通过
+- 审核人：项目作者（通过当前协作任务明确确认）
+- 目标提交：`feat(cli): clarify terminal execution trace`
+- 基线提交：`68e470b docs(cli): design minimal terminal execution trace`
+- 审核范围：独立 `TerminalTrace`、AgentLoop 三事件观察接口、CLI 默认接入与 ASK 决策、按工具类型的有界展示、二次脱敏、终端控制字符安全编码、README/DESIGN、实施记录及 trace/CLI/loop 自动化测试
+- TDD 证据：formatter 模块缺失、AgentLoop/CLI 接口缺失、审批 marker 缺失、ASK 参数凭据泄漏均先观察预期失败；最终质量审查发现终端控制字符可伪造事件后，先得到 `9 failed, 67 passed`，补充 U+2028/U+2029 边界又得到 `1 failed`，再以“脱敏、终端安全编码、截断”的最小实现转绿
+- 本地验证：`tests/test_trace.py` 58 项通过；trace/CLI/loop 定向组合 105 项通过；`python -m pytest -q` 最终 348 项通过；`python -m compileall -q code_operator evals scripts tests`、暂存差异格式检查均通过
+- 展示与安全边界：读取/搜索/目录工具不展示结果 payload；写入工具展示受限 diff，命令展示退出码、超时及受限 stdout/stderr；元数据保持单行，多行详情只保留普通 LF，C0/C1、DEL、Unicode 控制/格式字符和行段分隔符均转成可见转义；trace sink 失败不改变 AgentLoop 结果
+- 独立复核：终端安全修复规格复核为 `FIX_SPEC_APPROVED`，完整组合质量复核为 `FINAL_QUALITY_APPROVED`，均无未解决 Critical/Important 问题
+- 安全扫描：当前 API Key 值、私钥头、Authorization Bearer 值和禁止的凭据/审计/缓存/PID/临时文件名在完整暂存范围中的命中数均为 0；依赖差异为空
+- 依赖与开源边界：未引入 Rich、Agent SDK/框架、第三方 Agent 源码或新依赖；未修改 JSONL audit schema、核心工具、安全策略、上下文管理或 Provider client
+- 已知限制：100/40 字符宽度只是不落盘的 UTF-8 合成预览，尚未验证真实窄终端的中文双宽、具体编码和实际换行；终端历史、重定向或录屏仍可能保存输出，未识别的 diff/stdout/stderr 敏感内容仍需人工检查；Ubuntu 尚未验证；最终录像、姓名 ZIP 和延期模拟答辩仍在后续阶段
+- 审核结论：通过；确认上述实现、测试、TDD 证据、文档、安全边界和已知限制可以纳入目标提交；本结论不授权远端推送
+- 审核时间：2026-08-30 12:12:44 +08:00
+- 审核依据：完整暂存补丁 `E3-001-review.patch`（SHA-256 `A90F5F3B37D9A96D51961960E5531B9CC489E19E8392B09B05B02E1670C5FE34`）、58 项 formatter 测试、105 项定向测试、348 项全量测试、编译与差异检查、凭据/临时文件扫描及两阶段复核
+
 本记录只覆盖上述审核范围，不扩大功能实现、远端推送或标签权限。

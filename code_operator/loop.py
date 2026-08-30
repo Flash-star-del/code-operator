@@ -30,6 +30,16 @@ class AuditLike(Protocol):
     def record_run(self, result: RunResult) -> None: ...
 
 
+class TraceLike(Protocol):
+    def record_model_round(
+        self, round_number: int, tool_call_count: int, usage_available: bool
+    ) -> None: ...
+
+    def record_tool(self, call: ToolCall, result: ToolResult) -> None: ...
+
+    def record_run(self, result: RunResult) -> None: ...
+
+
 def _call_result_signature(
     call_name: str,
     arguments_raw: str,
@@ -60,6 +70,7 @@ class AgentLoop:
         max_output_tokens: int = DEFAULT_MAX_OUTPUT_TOKENS,
         system_prompt: str = SYSTEM_PROMPT,
         audit: AuditLike | None = None,
+        trace: TraceLike | None = None,
     ) -> None:
         self._client = client
         self._registry = registry
@@ -71,6 +82,7 @@ class AgentLoop:
             max_output_tokens=max_output_tokens,
         )
         self._audit = audit
+        self._trace = trace
 
     def run(self, user_task: str) -> RunResult:
         messages: list[dict[str, object]] = [
@@ -106,6 +118,11 @@ class AgentLoop:
                     self._audit.record_run(run_result)
                 except Exception:
                     pass
+            if self._trace is not None:
+                try:
+                    self._trace.record_run(run_result)
+                except Exception:
+                    pass
             return run_result
 
         for _ in range(self._max_model_rounds):
@@ -127,6 +144,15 @@ class AgentLoop:
                 provider_usage_complete = False
             else:
                 provider_tokens += turn.usage.total_tokens
+            if self._trace is not None:
+                try:
+                    self._trace.record_model_round(
+                        model_rounds,
+                        len(turn.tool_calls),
+                        turn.usage is not None and turn.usage.total_tokens is not None,
+                    )
+                except Exception:
+                    pass
             messages.append(turn.to_replay_message())
 
             if turn.tool_calls:
@@ -165,6 +191,11 @@ class AgentLoop:
                     if self._audit is not None:
                         try:
                             self._audit.record_tool(call, tool_result)
+                        except Exception:
+                            pass
+                    if self._trace is not None:
+                        try:
+                            self._trace.record_tool(call, tool_result)
                         except Exception:
                             pass
                     if tool_result.error_code == "USER_ABORTED":

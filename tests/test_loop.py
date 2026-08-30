@@ -6,14 +6,50 @@ from pathlib import Path
 import pytest
 
 from code_operator.__main__ import build_registry, run_task
+from code_operator.client import ProviderError, ProviderProtocolError
 from code_operator.config import ProviderConfig
 from code_operator.loop import AgentLoop
-from code_operator.models import AssistantTurn, ToolCall, ToolResult, Usage
+from code_operator.models import AssistantTurn, RunResult, ToolCall, ToolResult, Usage
 from code_operator.policy import WorkspacePolicy
 from code_operator.tools.filesystem import FileTools
 from code_operator.tools.filesystem import MAX_FILE_BYTES
 from code_operator.tools.registry import ToolRegistry
 from tests.fakes import FakeModelClient
+
+
+class RecordingTrace:
+    def __init__(self) -> None:
+        self.events: list[tuple[object, ...]] = []
+
+    def record_model_round(
+        self, round_number: int, tool_call_count: int, usage_available: bool
+    ) -> None:
+        self.events.append(("model", round_number, tool_call_count, usage_available))
+
+    def record_tool(self, call: ToolCall, result: ToolResult) -> None:
+        self.events.append(("tool", call.id, result.tool_call_id, result.ok))
+
+    def record_run(self, result: RunResult) -> None:
+        self.events.append(("run", result.status, result.provider_total_tokens is not None))
+
+
+class BrokenTrace:
+    def record_model_round(self, *_: object) -> None:
+        raise OSError("trace model")
+
+    def record_tool(self, *_: object) -> None:
+        raise OSError("trace tool")
+
+    def record_run(self, *_: object) -> None:
+        raise OSError("trace run")
+
+
+def assert_one_run_event(
+    trace: RecordingTrace, status: str, usage_available: bool
+) -> None:
+    assert [event for event in trace.events if event[0] == "run"] == [
+        ("run", status, usage_available)
+    ]
 
 
 def turn(
@@ -83,6 +119,74 @@ def test_user_tool_result_and_final_text_form_minimal_loop() -> None:
     }
 
 
+def test_trace_records_model_tool_model_run_with_usage_availability() -> None:
+    call = ToolCall(
+        "trace-call", "write_file", '{"path":"trace.py","content":"pass\\n"}'
+    )
+    model = FakeModelClient(
+        [
+            turn(calls=[call], finish_reason="tool_calls", total_tokens=5),
+            turn(content="done", total_tokens=None),
+        ]
+    )
+    trace = RecordingTrace()
+
+    result = AgentLoop(
+        model, ToolRegistry({"write_file": successful_handler}), trace=trace
+    ).run("inspect")
+
+    assert result.status == "COMPLETED"
+    assert trace.events == [
+        ("model", 1, 1, True),
+        ("tool", "trace-call", "trace-call", True),
+        ("model", 2, 0, False),
+        ("run", "COMPLETED", False),
+    ]
+    assert result.provider_total_tokens is None
+
+
+def test_broken_trace_does_not_change_successful_tool_loop() -> None:
+    call = ToolCall(
+        "broken-call", "write_file", '{"path":"broken.py","content":"pass\\n"}'
+    )
+    model = FakeModelClient(
+        [
+            turn(calls=[call], finish_reason="tool_calls"),
+            turn(content="done"),
+        ]
+    )
+
+    result = AgentLoop(
+        model,
+        ToolRegistry({"write_file": successful_handler}),
+        trace=BrokenTrace(),
+    ).run("inspect")
+
+    assert result.status == "COMPLETED"
+    assert result.model_rounds == 2
+    assert result.tool_calls == 1
+    second_messages = model.calls[1][0]
+    tool_message = next(message for message in second_messages if message["role"] == "tool")
+    assert json.loads(str(tool_message["content"]))["ok"] is True
+
+
+def test_context_limit_records_only_one_run_event_without_model_round() -> None:
+    model = FakeModelClient([AssertionError("不得请求模型")])
+    trace = RecordingTrace()
+
+    result = AgentLoop(
+        model,
+        ToolRegistry({}),
+        context_window=400,
+        max_output_tokens=200,
+        system_prompt="short system",
+        trace=trace,
+    ).run("x" * 2_000)
+
+    assert result.status == "CONTEXT_LIMIT"
+    assert trace.events == [("run", "CONTEXT_LIMIT", False)]
+
+
 def call_turn_message(call: ToolCall) -> dict[str, object]:
     return {
         "role": "assistant",
@@ -123,12 +227,18 @@ def test_bad_arguments_still_produce_one_matching_tool_result() -> None:
 def test_empty_or_truncated_final_response_is_not_completed() -> None:
     empty_model = FakeModelClient([turn(content="   ")])
     truncated_model = FakeModelClient([turn(content="partial", finish_reason="length")])
+    empty_trace = RecordingTrace()
+    truncated_trace = RecordingTrace()
 
-    empty = AgentLoop(empty_model, ToolRegistry({})).run("task")
-    truncated = AgentLoop(truncated_model, ToolRegistry({})).run("task")
+    empty = AgentLoop(empty_model, ToolRegistry({}), trace=empty_trace).run("task")
+    truncated = AgentLoop(
+        truncated_model, ToolRegistry({}), trace=truncated_trace
+    ).run("task")
 
     assert empty.status == "EMPTY_RESPONSE"
     assert truncated.status == "OUTPUT_TRUNCATED"
+    assert_one_run_event(empty_trace, "EMPTY_RESPONSE", True)
+    assert_one_run_event(truncated_trace, "OUTPUT_TRUNCATED", True)
 
 
 def test_missing_usage_makes_provider_total_tokens_unknown() -> None:
@@ -143,6 +253,26 @@ def test_missing_usage_makes_provider_total_tokens_unknown() -> None:
     result = AgentLoop(model, ToolRegistry({})).run("task")
 
     assert result.provider_total_tokens is None
+
+
+@pytest.mark.parametrize(
+    ("error_type", "expected_status"),
+    [
+        (ProviderError, "PROVIDER_ERROR"),
+        (ProviderProtocolError, "PROVIDER_PROTOCOL_ERROR"),
+    ],
+)
+def test_provider_exceptions_record_one_terminal_run_event(
+    error_type: type[ProviderError], expected_status: str
+) -> None:
+    trace = RecordingTrace()
+    model = FakeModelClient([error_type("provider failure")])
+
+    result = AgentLoop(model, ToolRegistry({}), trace=trace).run("inspect")
+
+    assert result.status == expected_status
+    assert result.model_rounds == 0
+    assert_one_run_event(trace, expected_status, False)
 
 
 def test_new_file_is_created_exclusively_with_diff_and_hash(tmp_path: Path) -> None:
@@ -273,6 +403,30 @@ def test_cli_assembly_connects_model_loop_and_workspace_tools(tmp_path: Path) ->
     assert len(model.calls[0][1]) == 6
 
 
+def test_run_task_passes_trace_and_keeps_jsonl_audit(tmp_path: Path) -> None:
+    model = FakeModelClient([turn(content="done", total_tokens=4)])
+    trace = RecordingTrace()
+    config = ProviderConfig(
+        api_key="private",
+        base_url="https://provider.example/v1",
+        model="test-model",
+    )
+
+    result = run_task(
+        config,
+        workspace=tmp_path,
+        task="inspect",
+        approve=lambda _argv, _cwd: False,
+        client=model,
+        environment={},
+        trace=trace,
+    )
+
+    assert result.status == "COMPLETED"
+    assert (tmp_path / ".code-operator" / "audit.jsonl").exists()
+    assert trace.events == [("model", 1, 0, True), ("run", "COMPLETED", True)]
+
+
 def test_cli_registry_configures_all_six_tool_handlers(tmp_path: Path) -> None:
     target = tmp_path / "sample.py"
     target.write_text("value = 1\n", encoding="utf-8")
@@ -337,14 +491,16 @@ def test_repeated_call_stops_after_third_equal_result() -> None:
             details={"text": "same"},
         )
 
+    trace = RecordingTrace()
     result = AgentLoop(
-        model, ToolRegistry({"list_dir": repeated_handler})
+        model, ToolRegistry({"list_dir": repeated_handler}), trace=trace
     ).run("inspect")
 
     assert result.status == "REPEATED_CALL"
     assert result.model_rounds == 3
     assert result.tool_calls == 3
     assert len(model.calls) == 3
+    assert_one_run_event(trace, "REPEATED_CALL", True)
 
 
 def test_five_consecutive_tool_failures_stop_before_next_model_request() -> None:
@@ -374,14 +530,16 @@ def test_five_consecutive_tool_failures_stop_before_next_model_request() -> None
             details={"path": path},
         )
 
+    trace = RecordingTrace()
     result = AgentLoop(
-        model, ToolRegistry({"read_file": failing_handler})
+        model, ToolRegistry({"read_file": failing_handler}), trace=trace
     ).run("inspect")
 
     assert result.status == "CONSECUTIVE_TOOL_FAILURES"
     assert result.model_rounds == 5
     assert result.tool_calls == 5
     assert len(model.calls) == 5
+    assert_one_run_event(trace, "CONSECUTIVE_TOOL_FAILURES", True)
 
 
 def test_multi_call_turn_returns_exactly_one_result_for_each_failure_kind() -> None:
@@ -458,15 +616,18 @@ def test_tool_budget_exhaustion_still_pairs_every_call_in_turn(
 
     monkeypatch.setattr(ToolResult, "to_message_content", recording_content)
 
+    trace = RecordingTrace()
     result = AgentLoop(
         model,
         ToolRegistry({}),
         max_tool_calls=1,
+        trace=trace,
     ).run("inspect")
 
     assert result.status == "TOOL_CALL_LIMIT"
     assert result.tool_calls == 3
     assert paired_ids == ["limit-0", "limit-1", "limit-2"]
+    assert_one_run_event(trace, "TOOL_CALL_LIMIT", True)
 
 
 class InterruptingModel:
@@ -480,12 +641,14 @@ class InterruptingModel:
 
 def test_ctrl_c_during_model_request_returns_user_aborted() -> None:
     model = InterruptingModel()
+    trace = RecordingTrace()
 
-    result = AgentLoop(model, ToolRegistry({})).run("inspect")
+    result = AgentLoop(model, ToolRegistry({}), trace=trace).run("inspect")
 
     assert result.status == "USER_ABORTED"
     assert result.model_rounds == 0
     assert model.calls == 1
+    assert_one_run_event(trace, "USER_ABORTED", False)
 
 
 def test_ctrl_c_during_tool_approval_returns_user_aborted() -> None:
@@ -500,14 +663,17 @@ def test_ctrl_c_during_tool_approval_returns_user_aborted() -> None:
     def interrupting_handler(**_: object) -> ToolResult:
         raise KeyboardInterrupt
 
+    trace = RecordingTrace()
     result = AgentLoop(
         model,
         ToolRegistry({"run_command": interrupting_handler}),
+        trace=trace,
     ).run("run")
 
     assert result.status == "USER_ABORTED"
     assert result.model_rounds == 1
     assert len(model.calls) == 1
+    assert_one_run_event(trace, "USER_ABORTED", True)
 
 
 def test_context_limit_stops_before_any_model_request() -> None:
@@ -574,13 +740,15 @@ def test_default_model_round_limit_is_sixteen() -> None:
             details={"path": path},
         )
 
+    trace = RecordingTrace()
     result = AgentLoop(
-        model, ToolRegistry({"read_file": handler})
+        model, ToolRegistry({"read_file": handler}), trace=trace
     ).run("inspect")
 
     assert result.status == "MODEL_ROUND_LIMIT"
     assert result.model_rounds == 16
     assert len(model.calls) == 16
+    assert_one_run_event(trace, "MODEL_ROUND_LIMIT", True)
 
 
 def test_content_filter_is_a_terminal_non_success_state() -> None:
@@ -588,10 +756,12 @@ def test_content_filter_is_a_terminal_non_success_state() -> None:
         [turn(content="partial", finish_reason="content_filter")]
     )
 
-    result = AgentLoop(model, ToolRegistry({})).run("task")
+    trace = RecordingTrace()
+    result = AgentLoop(model, ToolRegistry({}), trace=trace).run("task")
 
     assert result.status == "CONTENT_FILTERED"
     assert result.final_text == "partial"
+    assert_one_run_event(trace, "CONTENT_FILTERED", True)
 
 
 @pytest.mark.parametrize(
