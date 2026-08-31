@@ -1,6 +1,6 @@
 # 开源经验校准与独立实现记录
 
-本文件只记录影响 code-operator 设计与自有测试的公开参考。R0 于 2026-08-27 21:52:26 +08:00 开始，目标 90 分钟、绝对上限 120 分钟；只主动打开计划第 2.3 节限定的官方 README/LICENSE、核心文件和直接相关测试。搜索结果页曾被动返回范围外的 issue、UI、插件等摘要，但未继续打开、未采用、未摘录为来源。2026-08-28 00:19:11 +08:00 恢复任务时墙钟已越过绝对停止点（包含任务暂停等待），因此立即停止外部阅读；后续只做本地核对，不新增来源，并如实保留该时间偏差。
+本文件记录影响 code-operator 设计与自有测试的公开参考。R0 于 2026-08-27 21:52:26 +08:00 开始，目标 90 分钟、绝对上限 120 分钟；只主动打开计划第 2.3 节限定的官方 README/LICENSE、核心文件和直接相关测试。搜索结果页曾被动返回范围外的 issue、UI、插件等摘要，但未继续打开、未采用、未摘录为来源。2026-08-28 00:19:11 +08:00 恢复任务时墙钟已越过绝对停止点（包含任务暂停等待），因此立即停止 R0 外部源码阅读；此后不再向 R0 固定代码来源快照新增项目或文件，并如实保留该时间偏差。E4 于 2026-08-31 另行增加四个官方产品行为文档，只作可观察行为对照，不属于代码来源，也不混入下方 R0 来源表。
 
 ## 来源与决策映射
 
@@ -77,7 +77,18 @@ R0 表中的十个名称是当时冻结的计划场景；实现阶段按最终�
 | T09 重试边界 | `test_retries_429_and_server_errors_at_most_twice`、`test_401_is_not_retried_and_error_never_contains_key_or_response_body`、`test_protocol_error_after_successful_http_is_never_retried` |
 | T10 截断/空响应 | `test_empty_or_truncated_final_response_is_not_completed`、`test_empty_final_response_remains_non_success_in_integrated_loop` |
 
-第三方生产代码复用仍为**无**，运行依赖仍仅 `httpx`，开发依赖仍仅 `pytest`；`THIRD_PARTY_NOTICES.md` 继续不存在。此复核不新增来源、不更新固定快照，也不把参考项目后续变化并入本项目设计。
+第三方生产代码复用仍为**无**，运行依赖仍仅 `httpx`，开发依赖仍仅 `pytest`；`THIRD_PARTY_NOTICES.md` 继续不存在。E1 对 R0 固定源码快照的复核不新增代码来源、不更新固定快照，也不把参考项目后续变化并入本项目设计。
+
+## E4 产品行为参考与独立实现差异
+
+以下四个官方产品行为文档的统一访问日期为 **2026-08-31**。E4 只参考其描述的用户可见行为，不以内部实现或生产代码作为源码依据，也不把它们列入 R0 代码来源表：
+
+- [OpenAI Conversation state](https://developers.openai.com/api/docs/guides/conversation-state)：说明 Responses API 可用 conversation 或 `previous_response_id` 等服务端状态方式延续对话。本项目继续调用 Moonshot OpenAI 兼容 Chat Completions，自行维护当前进程内的 `messages`，没有使用 Responses API、OpenAI Agent SDK 或服务端会话状态。
+- [Claude Code CLI reference](https://code.claude.com/docs/en/cli-reference)：把交互、print、continue 和 resume 作为产品入口行为对照。本项目只实现一次性调用与同进程交互两种模式，不实现 continue/resume 对应的跨进程恢复。
+- [Claude Code checkpointing](https://code.claude.com/docs/en/checkpointing)：用于确认“代码恢复”与“对话恢复”可以分离，Bash 产生的文件系统变化不在代码 checkpoint 跟踪范围内，checkpoint 也不是 Git 的替代品。本项目据此明确边界，但 ChangeJournal、哈希冲突保护、原子恢复和测试均自行设计；`run_command` 及其外部副作用不在 Undo 范围。
+- [Claude Code sessions](https://code.claude.com/docs/en/sessions)：仅作为持久 Session/恢复行为的补充对照。本项目没有 session/transcript/checkpoint 持久化，进程退出后无法恢复。
+
+这些页面没有改变 R0 的代码来源边界：第三方生产代码复用仍为**无**，没有复制或翻译式移植 Codex、Claude Code 或其他 Agent 的会话/撤销实现，也没有新增 Agent SDK、框架、CLI 或运行时依赖。E4 的 `AgentSession`、可重入 AgentLoop、多 user turn 裁剪、中止结果配对和有限文件 Undo 均由本项目独立实现并由自有失败测试驱动。
 
 ## 拒绝引入的成熟项目复杂性
 

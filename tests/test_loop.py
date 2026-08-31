@@ -44,6 +44,19 @@ class BrokenTrace:
         raise OSError("trace run")
 
 
+class RecordingAudit:
+    def __init__(self) -> None:
+        self.events: list[tuple[object, ...]] = []
+
+    def record_tool(self, call: ToolCall, result: ToolResult) -> None:
+        self.events.append(
+            ("tool", call.id, result.tool_call_id, result.error_code)
+        )
+
+    def record_run(self, result: RunResult) -> None:
+        self.events.append(("run", result.status))
+
+
 def assert_one_run_event(
     trace: RecordingTrace, status: str, usage_available: bool
 ) -> None:
@@ -224,6 +237,147 @@ def test_bad_arguments_still_produce_one_matching_tool_result() -> None:
     assert json.loads(tool_messages[0]["content"])["error_code"] == "INVALID_ARGUMENTS"
 
 
+def test_deep_json_tool_arguments_keep_session_history_replayable() -> None:
+    deeply_nested = "[" * 2_000 + "0" + "]" * 2_000
+    call = ToolCall("deep", "list_dir", deeply_nested)
+    model = FakeModelClient(
+        [
+            turn(calls=[call], finish_reason="tool_calls"),
+            turn(content="first recovered"),
+            turn(content="second recovered"),
+        ]
+    )
+    audit = RecordingAudit()
+    trace = RecordingTrace()
+    loop = AgentLoop(
+        model,
+        ToolRegistry({}),
+        system_prompt="sys",
+        audit=audit,
+        trace=trace,
+    )
+
+    first = loop.run("deep input")
+    second = loop.run("next input")
+
+    assert first.status == second.status == "COMPLETED"
+    assert len(model.calls) == 3
+    first_tool_message = model.calls[1][0][3]
+    assert first_tool_message["role"] == "tool"
+    assert first_tool_message["tool_call_id"] == "deep"
+    assert json.loads(str(first_tool_message["content"])) == {
+        "ok": False,
+        "error_code": "INVALID_ARGUMENTS",
+        "message": "arguments 必须是合法 JSON 对象",
+        "details": {},
+    }
+    assert [message["role"] for message in model.calls[2][0]] == [
+        "system",
+        "user",
+        "assistant",
+        "tool",
+        "assistant",
+        "user",
+    ]
+    assert [event for event in audit.events if event[0] == "run"] == [
+        ("run", "COMPLETED"),
+        ("run", "COMPLETED"),
+    ]
+    assert [event for event in trace.events if event[0] == "run"] == [
+        ("run", "COMPLETED", True),
+        ("run", "COMPLETED", True),
+    ]
+
+
+def test_unserializable_tool_details_keep_session_history_replayable() -> None:
+    call = ToolCall("unsafe", "list_dir", "{}")
+    model = FakeModelClient(
+        [
+            turn(calls=[call], finish_reason="tool_calls"),
+            turn(content="first recovered"),
+            turn(content="second recovered"),
+        ]
+    )
+
+    def handler(*, tool_call_id: str, **_: object) -> ToolResult:
+        return ToolResult(
+            tool_call_id=tool_call_id,
+            name="list_dir",
+            ok=True,
+            error_code=None,
+            message="unsafe",
+            details={"value": object()},
+        )
+
+    audit = RecordingAudit()
+    trace = RecordingTrace()
+    loop = AgentLoop(
+        model,
+        ToolRegistry({"list_dir": handler}),
+        system_prompt="sys",
+        audit=audit,
+        trace=trace,
+    )
+
+    first = loop.run("unsafe result")
+    second = loop.run("next input")
+
+    assert first.status == second.status == "COMPLETED"
+    assert len(model.calls) == 3
+    first_tool_message = model.calls[1][0][3]
+    assert first_tool_message["role"] == "tool"
+    assert first_tool_message["tool_call_id"] == "unsafe"
+    content = str(first_tool_message["content"])
+    assert "object at" not in content
+    assert json.loads(content) == {
+        "ok": False,
+        "error_code": "TOOL_EXECUTION_ERROR",
+        "message": "工具返回了无效结果",
+        "details": {},
+    }
+    assert [message["role"] for message in model.calls[2][0]] == [
+        "system",
+        "user",
+        "assistant",
+        "tool",
+        "assistant",
+        "user",
+    ]
+    assert [event for event in audit.events if event[0] == "run"] == [
+        ("run", "COMPLETED"),
+        ("run", "COMPLETED"),
+    ]
+    assert [event for event in trace.events if event[0] == "run"] == [
+        ("run", "COMPLETED", True),
+        ("run", "COMPLETED", True),
+    ]
+
+
+def test_invalid_tool_call_ids_do_not_poison_later_session_history() -> None:
+    invalid_calls = [
+        ToolCall("same", "list_dir", "{}"),
+        ToolCall("same", "list_dir", "{}"),
+    ]
+    model = FakeModelClient(
+        [
+            turn(calls=invalid_calls, finish_reason="tool_calls"),
+            turn(content="recovered"),
+        ]
+    )
+    loop = AgentLoop(model, ToolRegistry({}), system_prompt="sys")
+
+    invalid = loop.run("invalid turn")
+    recovered = loop.run("next turn")
+
+    assert invalid.status == "PROVIDER_PROTOCOL_ERROR"
+    assert recovered.status == "COMPLETED"
+    assert model.calls[1][0] == [
+        {"role": "system", "content": "sys"},
+        {"role": "user", "content": "invalid turn"},
+        {"role": "user", "content": "next turn"},
+    ]
+
+
 def test_empty_or_truncated_final_response_is_not_completed() -> None:
     empty_model = FakeModelClient([turn(content="   ")])
     truncated_model = FakeModelClient([turn(content="partial", finish_reason="length")])
@@ -253,6 +407,156 @@ def test_missing_usage_makes_provider_total_tokens_unknown() -> None:
     result = AgentLoop(model, ToolRegistry({})).run("task")
 
     assert result.provider_total_tokens is None
+
+
+def test_reentrant_runs_keep_history_but_reset_rounds_and_usage() -> None:
+    model = FakeModelClient(
+        [
+            turn(content="first answer", total_tokens=3),
+            turn(content="second answer", total_tokens=5),
+        ]
+    )
+    loop = AgentLoop(model, ToolRegistry({}), system_prompt="custom system")
+
+    first = loop.run("first user")
+    second = loop.run("second user")
+
+    assert first.model_rounds == second.model_rounds == 1
+    assert first.provider_total_tokens == 3
+    assert second.provider_total_tokens == 5
+    assert model.calls[1][0] == [
+        {"role": "system", "content": "custom system"},
+        {"role": "user", "content": "first user"},
+        {"role": "assistant", "content": "first answer"},
+        {"role": "user", "content": "second user"},
+    ]
+
+
+def test_reentrant_runs_reset_tool_failure_repeat_and_usage_counters() -> None:
+    first_calls = [
+        ToolCall(f"first-{index}", "list_dir", "{}") for index in range(2)
+    ]
+    second_calls = [
+        ToolCall(f"second-{index}", "list_dir", "{}") for index in range(2)
+    ]
+    model = FakeModelClient(
+        [
+            turn(calls=first_calls, finish_reason="tool_calls", total_tokens=1),
+            turn(content="first done", total_tokens=2),
+            turn(calls=second_calls, finish_reason="tool_calls", total_tokens=2),
+            turn(content="second done", total_tokens=3),
+        ]
+    )
+
+    def repeated_failure(*, tool_call_id: str, **_: object) -> ToolResult:
+        return ToolResult(
+            tool_call_id=tool_call_id,
+            name="list_dir",
+            ok=False,
+            error_code="TEST_FAILURE",
+            message="same",
+            details={},
+        )
+
+    loop = AgentLoop(
+        model,
+        ToolRegistry({"list_dir": repeated_failure}),
+        max_tool_calls=2,
+    )
+
+    first = loop.run("first")
+    second = loop.run("second")
+
+    assert (first.status, first.model_rounds, first.tool_calls) == (
+        "COMPLETED",
+        2,
+        2,
+    )
+    assert (second.status, second.model_rounds, second.tool_calls) == (
+        "COMPLETED",
+        2,
+        2,
+    )
+    assert first.provider_total_tokens == 3
+    assert second.provider_total_tokens == 5
+    assert len(model.calls) == 4
+
+
+def test_reset_keeps_only_custom_system_prompt_for_next_run() -> None:
+    model = FakeModelClient(
+        [turn(content="first answer"), turn(content="second answer")]
+    )
+    loop = AgentLoop(model, ToolRegistry({}), system_prompt="custom system")
+
+    loop.run("first user")
+    loop.reset()
+    result = loop.run("second user")
+
+    assert result.status == "COMPLETED"
+    assert model.calls[1][0] == [
+        {"role": "system", "content": "custom system"},
+        {"role": "user", "content": "second user"},
+    ]
+
+
+def test_trimmed_history_is_removed_from_persistent_messages() -> None:
+    model = FakeModelClient(
+        [
+            turn(content="x" * 2_500),
+            turn(content="second answer"),
+            turn(content="third answer"),
+        ]
+    )
+    loop = AgentLoop(
+        model,
+        ToolRegistry({}),
+        context_window=1_600,
+        max_output_tokens=200,
+        system_prompt="sys",
+    )
+
+    loop.run("first user")
+    second = loop.run("second user")
+    third = loop.run("third user")
+
+    assert second.status == third.status == "COMPLETED"
+    assert [message["content"] for message in model.calls[1][0]] == [
+        "sys",
+        "second user",
+    ]
+    assert [message["content"] for message in model.calls[2][0]] == [
+        "sys",
+        "second user",
+        "second answer",
+        "third user",
+    ]
+
+
+def test_oversized_new_user_is_rolled_back_without_damaging_history() -> None:
+    model = FakeModelClient(
+        [turn(content="first answer"), turn(content="second answer")]
+    )
+    loop = AgentLoop(
+        model,
+        ToolRegistry({}),
+        context_window=4_000,
+        max_output_tokens=200,
+        system_prompt="sys",
+    )
+
+    first = loop.run("first user")
+    oversized = loop.run("x" * 20_000)
+    second = loop.run("second user")
+
+    assert first.status == second.status == "COMPLETED"
+    assert oversized.status == "CONTEXT_LIMIT"
+    assert len(model.calls) == 2
+    assert model.calls[1][0] == [
+        {"role": "system", "content": "sys"},
+        {"role": "user", "content": "first user"},
+        {"role": "assistant", "content": "first answer"},
+        {"role": "user", "content": "second user"},
+    ]
 
 
 @pytest.mark.parametrize(
@@ -425,6 +729,50 @@ def test_run_task_passes_trace_and_keeps_jsonl_audit(tmp_path: Path) -> None:
     assert result.status == "COMPLETED"
     assert (tmp_path / ".code-operator" / "audit.jsonl").exists()
     assert trace.events == [("model", 1, 0, True), ("run", "COMPLETED", True)]
+
+
+def test_run_task_closes_only_the_client_it_constructs(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    class ClosingFakeModel(FakeModelClient):
+        def __init__(self) -> None:
+            super().__init__([turn(content="done")])
+            self.close_calls = 0
+
+        def close(self) -> None:
+            self.close_calls += 1
+
+    config = ProviderConfig(
+        api_key="private",
+        base_url="https://provider.example/v1",
+        model="test-model",
+    )
+    owned = ClosingFakeModel()
+    monkeypatch.setattr("code_operator.session.ModelClient", lambda _config: owned)
+
+    owned_result = run_task(
+        config,
+        workspace=tmp_path,
+        task="owned",
+        approve=lambda _argv, _cwd: False,
+        environment={},
+    )
+
+    assert owned_result.status == "COMPLETED"
+    assert owned.close_calls == 1
+
+    external = ClosingFakeModel()
+    external_result = run_task(
+        config,
+        workspace=tmp_path,
+        task="external",
+        approve=lambda _argv, _cwd: False,
+        client=external,
+        environment={},
+    )
+
+    assert external_result.status == "COMPLETED"
+    assert external.close_calls == 0
 
 
 def test_cli_registry_configures_all_six_tool_handlers(tmp_path: Path) -> None:
@@ -674,6 +1022,230 @@ def test_ctrl_c_during_tool_approval_returns_user_aborted() -> None:
     assert result.model_rounds == 1
     assert len(model.calls) == 1
     assert_one_run_event(trace, "USER_ABORTED", True)
+
+
+@pytest.mark.parametrize("interrupt_index", [0, 1, 2])
+def test_ctrl_c_mid_tool_turn_pairs_every_call_before_return(
+    interrupt_index: int,
+) -> None:
+    calls = [
+        ToolCall("one", "list_dir", "{}"),
+        ToolCall("two", "list_dir", "{}"),
+        ToolCall("three", "list_dir", "{}"),
+    ]
+    model = FakeModelClient(
+        [
+            turn(calls=calls, finish_reason="tool_calls", total_tokens=7),
+            AssertionError("工具执行中止后不得再次请求模型"),
+        ]
+    )
+    executed: list[str] = []
+
+    def handler(*, tool_call_id: str, **_: object) -> ToolResult:
+        executed.append(tool_call_id)
+        if tool_call_id == calls[interrupt_index].id:
+            raise KeyboardInterrupt
+        return ToolResult(
+            tool_call_id=tool_call_id,
+            name="list_dir",
+            ok=True,
+            error_code=None,
+            message="ok",
+            details={},
+        )
+
+    audit = RecordingAudit()
+    trace = RecordingTrace()
+    loop = AgentLoop(
+        model,
+        ToolRegistry({"list_dir": handler}),
+        audit=audit,
+        trace=trace,
+    )
+
+    result = loop.run("inspect")
+
+    expected_codes = [None] * interrupt_index + ["USER_ABORTED"] + [
+        "NOT_EXECUTED_AFTER_ABORT"
+    ] * (2 - interrupt_index)
+    assert result.status == "USER_ABORTED"
+    assert result.model_rounds == 1
+    assert result.tool_calls == 3
+    assert result.provider_total_tokens == 7
+    assert len(model.calls) == 1
+    assert executed == [call.id for call in calls[: interrupt_index + 1]]
+
+    assistant_and_tools = loop._messages[-4:]
+    assert assistant_and_tools[0] == turn(
+        calls=calls, finish_reason="tool_calls", total_tokens=7
+    ).to_replay_message()
+    assert [message["tool_call_id"] for message in assistant_and_tools[1:]] == [
+        "one",
+        "two",
+        "three",
+    ]
+    contents = [
+        json.loads(str(message["content"]))
+        for message in assistant_and_tools[1:]
+    ]
+    assert [content["error_code"] for content in contents] == expected_codes
+    assert contents[interrupt_index] == {
+        "ok": False,
+        "error_code": "USER_ABORTED",
+        "message": "工具执行被用户中止",
+        "details": {},
+    }
+    for content in contents[interrupt_index + 1 :]:
+        assert content == {
+            "ok": False,
+            "error_code": "NOT_EXECUTED_AFTER_ABORT",
+            "message": "同轮较早的工具调用被中止，本调用未执行",
+            "details": {},
+        }
+    assert [event[:3] for event in audit.events if event[0] == "tool"] == [
+        ("tool", "one", "one"),
+        ("tool", "two", "two"),
+        ("tool", "three", "three"),
+    ]
+    assert [event[3] for event in audit.events if event[0] == "tool"] == expected_codes
+    assert [event for event in audit.events if event[0] == "run"] == [
+        ("run", "USER_ABORTED")
+    ]
+    assert [event[1:3] for event in trace.events if event[0] == "tool"] == [
+        ("one", "one"),
+        ("two", "two"),
+        ("three", "three"),
+    ]
+    assert_one_run_event(trace, "USER_ABORTED", True)
+
+
+@pytest.mark.parametrize("abort_index", [0, 1, 2])
+def test_returned_user_abort_stops_consuming_and_pairs_remaining_calls(
+    abort_index: int,
+) -> None:
+    calls = [
+        ToolCall("one", "list_dir", "{}"),
+        ToolCall("two", "list_dir", "{}"),
+        ToolCall("three", "list_dir", "{}"),
+    ]
+    model = FakeModelClient(
+        [
+            turn(calls=calls, finish_reason="tool_calls", total_tokens=11),
+            turn(content="next completed", total_tokens=13),
+        ]
+    )
+    executed: list[str] = []
+    abort_details = {"phase": "approval", "position": abort_index}
+
+    def handler(*, tool_call_id: str, **_: object) -> ToolResult:
+        executed.append(tool_call_id)
+        if tool_call_id == calls[abort_index].id:
+            return ToolResult(
+                tool_call_id=tool_call_id,
+                name="list_dir",
+                ok=False,
+                error_code="USER_ABORTED",
+                message="保留真实中止结果",
+                details=abort_details,
+            )
+        return ToolResult(
+            tool_call_id=tool_call_id,
+            name="list_dir",
+            ok=True,
+            error_code=None,
+            message=f"done-{tool_call_id}",
+            details={"value": tool_call_id},
+        )
+
+    audit = RecordingAudit()
+    trace = RecordingTrace()
+    loop = AgentLoop(
+        model,
+        ToolRegistry({"list_dir": handler}),
+        audit=audit,
+        trace=trace,
+    )
+
+    result = loop.run("inspect")
+
+    assert result.status == "USER_ABORTED"
+    assert result.model_rounds == 1
+    assert result.tool_calls == 3
+    assert result.provider_total_tokens == 11
+    assert len(model.calls) == 1
+    assert executed == [call.id for call in calls[: abort_index + 1]]
+
+    assistant_and_tools = loop._messages[-4:]
+    assert assistant_and_tools[0] == turn(
+        calls=calls, finish_reason="tool_calls", total_tokens=11
+    ).to_replay_message()
+    assert [message["tool_call_id"] for message in assistant_and_tools[1:]] == [
+        "one",
+        "two",
+        "three",
+    ]
+    contents = [
+        json.loads(str(message["content"]))
+        for message in assistant_and_tools[1:]
+    ]
+    for index, content in enumerate(contents[:abort_index]):
+        assert content == {
+            "ok": True,
+            "error_code": None,
+            "message": f"done-{calls[index].id}",
+            "details": {"value": calls[index].id},
+        }
+    assert contents[abort_index] == {
+        "ok": False,
+        "error_code": "USER_ABORTED",
+        "message": "保留真实中止结果",
+        "details": abort_details,
+    }
+    for content in contents[abort_index + 1 :]:
+        assert content == {
+            "ok": False,
+            "error_code": "NOT_EXECUTED_AFTER_ABORT",
+            "message": "同轮较早的工具调用被中止，本调用未执行",
+            "details": {},
+        }
+
+    expected_codes = [None] * abort_index + ["USER_ABORTED"] + [
+        "NOT_EXECUTED_AFTER_ABORT"
+    ] * (2 - abort_index)
+    assert [event[:3] for event in audit.events if event[0] == "tool"] == [
+        ("tool", "one", "one"),
+        ("tool", "two", "two"),
+        ("tool", "three", "three"),
+    ]
+    assert [event[3] for event in audit.events if event[0] == "tool"] == expected_codes
+    assert [event for event in audit.events if event[0] == "run"] == [
+        ("run", "USER_ABORTED")
+    ]
+    assert [event[1:3] for event in trace.events if event[0] == "tool"] == [
+        ("one", "one"),
+        ("two", "two"),
+        ("three", "three"),
+    ]
+    assert_one_run_event(trace, "USER_ABORTED", True)
+
+    recovered = loop.run("continue")
+
+    assert recovered.status == "COMPLETED"
+    assert len(model.calls) == 2
+    assert [message["role"] for message in model.calls[1][0]] == [
+        "system",
+        "user",
+        "assistant",
+        "tool",
+        "tool",
+        "tool",
+        "user",
+    ]
+    assert [
+        message["tool_call_id"]
+        for message in model.calls[1][0]
+        if message["role"] == "tool"
+    ] == ["one", "two", "three"]
 
 
 def test_context_limit_stops_before_any_model_request() -> None:

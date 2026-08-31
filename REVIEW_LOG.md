@@ -279,4 +279,23 @@
 - 审核时间：2026-08-30 21:08:00 +08:00
 - 审核依据：项目作者对五部分设计逐段批准并明确回复 `E4-DESIGN-001 人工审核通过`；书面规格 SHA-256 `6FCA086D1DA8F15B930215A243812A187B9248B265B773E2DFC8FCA0626C1529`；完整暂存范围、占位符、依赖与凭据形态检查
 
+<a id="e4-001"></a>
+
+## E4-001：有界交互会话与文件 Undo 实现
+
+- 审核状态：人工审核通过
+- 审核人：项目作者（通过当前协作任务明确确认）
+- 目标提交：`feat(session): add bounded interactive session and file undo`
+- 基线提交：`b6d273e docs(session): design bounded interactive sessions and undo`
+- 审核范围：有界内存 `ChangeJournal`、`write_file`/`edit_file` 变更记录和受保护 Undo、多 user turn 上下文与两级完整分组裁剪、顺序工具中止配对、可重入 `AgentLoop`、`AgentSession` 资源所有权与一次性本地事件、双模式 CLI 及 `/undo`/`/new`/`/exit`、对应自动化测试、README/DESIGN/REFERENCES、实施计划和仓库外 v4.5 计划证据
+- TDD 证据：Journal 模块缺失、文件工具未接日志、旧上下文拒绝第二个 user turn、循环不保留历史及中止调用缺结果、Session 模块缺失、旧 CLI 缺持续循环和懒初始化、E4 文档事实缺失均先观察预期失败；独立规格和质量审查继续以失败测试复现并修复内部链接重定向、中止记账、返回式 `USER_ABORTED` 后续误执行、深层 JSON/不可序列化结果污染历史、撤销事件重复、关闭异常覆盖主异常、CLI 环境 Key 回显和异常退出码误分类
+- 最终离线验证：主进程重新运行 `python -m pytest -q` 得到 `471 passed in 47.19s`；协议、客户端、注册表、假模型集成、Golden Eval 和提交预检兼容组得到 `115 passed in 42.18s`；`python -m compileall -q code_operator evals scripts tests` 与 `git diff --check` 退出码均为 0；提交预检专项 22 项通过；README.txt 为 874 个 Unicode 字符
+- 兼容与安全结论：六个模型工具 schema、P0 回放字段、一次性退出码、Eval harness 和 JSONL audit schema保持兼容；Undo 不写 audit；依赖差异为空；当前环境 API Key 在完整候选中的精确命中数为 0，私钥头和 `sk-` 类模式为 0，两处 Bearer 模式均为明确的合成脱敏测试；候选中无 `.env`、audit、session/transcript/checkpoint、PID、临时探针或缓存产物
+- 独立实现边界：核心会话、循环、协议处理、工具、安全策略、上下文和 Undo 均为本项目独立实现；OpenAI Responses 与 Claude Code 官方资料只作公开产品行为参考，不使用 Agent SDK/框架、第三方 Agent 生产代码或翻译式移植
+- 独立复核：Task1 至 Task7 均完成规格和质量双审；最终完整候选审查结论为 `FINAL REVIEW APPROVED`，未发现未解决的 Critical、Important 或 Minor 问题
+- 已知限制：无跨进程 Resume 或持久化会话历史；不回滚 `run_command` 或外部副作用；未执行新的 E4 真实 API 探针；Ubuntu、真实窄终端中文行为和第一次完整录像仍未验证
+- 审核结论：通过；确认上述实现、测试、TDD 证据、文档、安全扫描、独立实现边界和已知限制可以纳入单一本地实现提交；本结论不授权远端推送
+- 审核时间：2026-08-31 19:35:37 +08:00
+- 审核依据：项目作者明确回复 `E4-001 人工审核通过`；完整 E4-001 人工审核包；主进程最终全量与兼容复验；任务级规格/质量复核；最终完整候选只读审查
+
 本记录只覆盖上述审核范围，不扩大功能实现、远端推送或标签权限。

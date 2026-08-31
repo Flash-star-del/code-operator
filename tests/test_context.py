@@ -137,3 +137,175 @@ def test_prepare_rejects_orphan_tool_result_instead_of_splitting_history() -> No
 
     with pytest.raises(ContextLimitError, match="配对"):
         manager.prepare(messages, [])
+
+
+def test_prepare_accepts_multiple_complete_user_turns_without_trimming() -> None:
+    messages = [
+        message("system", "system"),
+        message("user", "first"),
+        message("assistant", "first done"),
+        message("user", "second"),
+    ]
+    manager = ContextManager(context_window=32_000, max_output_tokens=8_000)
+
+    prepared = manager.prepare(messages, [])
+
+    assert prepared.messages == messages
+    assert prepared.trimmed_turns == 0
+    assert prepared.trimmed_rounds == 0
+
+
+def test_trim_removes_oldest_complete_user_turn_before_current_groups() -> None:
+    system = message("system", "system")
+    old_turn = [
+        message("user", "old task"),
+        message("assistant", "old answer" * 100),
+    ]
+    current_turn = [
+        message("user", "current task"),
+        tool_call_message("current"),
+        tool_result_message("current", "current result"),
+    ]
+    expected = [system, *current_turn]
+    sizing = ContextManager(context_window=10_000, max_output_tokens=10)
+    minimum_estimate = sizing.estimate_tokens(expected, [])
+    manager = ContextManager(
+        context_window=minimum_estimate + 10,
+        max_output_tokens=10,
+    )
+
+    prepared = manager.prepare([system, *old_turn, *current_turn], [])
+
+    assert prepared.messages == expected
+    assert prepared.trimmed_turns == 1
+    assert prepared.trimmed_rounds == 0
+
+
+def test_trim_current_turn_removes_oldest_complete_assistant_group() -> None:
+    prefix = [message("system", "system"), message("user", "current task")]
+    old_group = [
+        tool_call_message("old"),
+        tool_result_message("old", "old result" * 100),
+    ]
+    latest_group = [
+        tool_call_message("latest"),
+        tool_result_message("latest", "latest result"),
+    ]
+    expected = prefix + latest_group
+    sizing = ContextManager(context_window=10_000, max_output_tokens=10)
+    minimum_estimate = sizing.estimate_tokens(expected, [])
+    manager = ContextManager(
+        context_window=minimum_estimate + 10,
+        max_output_tokens=10,
+    )
+
+    prepared = manager.prepare(prefix + old_group + latest_group, [])
+
+    assert prepared.messages == expected
+    assert prepared.trimmed_turns == 0
+    assert prepared.trimmed_rounds == 1
+
+
+@pytest.mark.parametrize(
+    "messages",
+    [
+        [
+            message("system", "system"),
+            message("assistant", "before first user"),
+            message("user", "task"),
+        ],
+        [
+            message("system", "system"),
+            message("user", "task"),
+            message("system", "second system"),
+        ],
+        [
+            message("system", "system"),
+            message("user", "task"),
+            tool_result_message("before-assistant"),
+        ],
+        [
+            message("system", "system"),
+            message("user", "task"),
+            tool_call_message("expected"),
+            tool_result_message("different"),
+        ],
+        [
+            message("system", "system"),
+            message("user", "task"),
+            message(
+                "assistant",
+                None,
+                tool_calls=[
+                    {
+                        "id": "duplicate",
+                        "type": "function",
+                        "function": {"name": "read_file", "arguments": "{}"},
+                    },
+                    {
+                        "id": "duplicate",
+                        "type": "function",
+                        "function": {"name": "list_dir", "arguments": "{}"},
+                    },
+                ],
+            ),
+            tool_result_message("duplicate"),
+            tool_result_message("duplicate"),
+        ],
+        [
+            message("system", "system"),
+            message("user", "task"),
+            tool_call_message("one"),
+            tool_result_message("one"),
+            tool_result_message("one"),
+        ],
+        [
+            message("system", "system"),
+            message("user", "task"),
+            tool_call_message("missing"),
+        ],
+        [
+            message("system", "system"),
+            message("user", "task"),
+            tool_call_message("interrupted-by-user"),
+            message("user", "next"),
+        ],
+        [
+            message("system", "system"),
+            message("user", "task"),
+            tool_call_message("interrupted-by-assistant"),
+            message("assistant", "next"),
+        ],
+        [
+            message("system", "system"),
+            message("user", "task"),
+            message("assistant", "ordinary answer"),
+            tool_result_message("unexpected"),
+        ],
+        [
+            message("system", "system"),
+            message("user", "task"),
+            message("developer", "unknown role"),
+        ],
+    ],
+    ids=[
+        "assistant-before-first-user",
+        "second-system",
+        "tool-before-assistant",
+        "tool-result-id-mismatch",
+        "duplicate-tool-call-id",
+        "duplicate-extra-tool-result",
+        "missing-tool-result",
+        "tool-call-interrupted-by-user",
+        "tool-call-interrupted-by-assistant",
+        "ordinary-assistant-followed-by-tool",
+        "unknown-role",
+    ],
+)
+def test_prepare_rejects_malformed_history_before_trimming(
+    messages: list[dict[str, object]],
+) -> None:
+    manager = ContextManager(context_window=32_000, max_output_tokens=8_000)
+
+    with pytest.raises(ContextLimitError):
+        manager.prepare(messages, [])

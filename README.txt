@@ -1,15 +1,11 @@
 code-operator
 
-Git 仓库地址：https://github.com/Flash-star-del/code-operator
+仓库：https://github.com/Flash-star-del/code-operator
 
-一、安装与启动
-要求 Python 3.11。执行“python -m pip install -r requirements.txt”安装，再运行“python -m code_operator --workspace <WORKSPACE> \"<TASK>\"”。必须通过环境变量提供 CODE_OPERATOR_API_KEY=<YOUR_API_KEY>、CODE_OPERATOR_BASE_URL=https://api.moonshot.cn/v1、CODE_OPERATOR_MODEL=kimi-k3。可用 CODE_OPERATOR_MAX_MODEL_ROUNDS 等变量收紧轮次和上下文限制。
+要求 Python 3.11。安装：python -m pip install -r requirements.txt。环境变量：CODE_OPERATOR_API_KEY=<YOUR_API_KEY>、CODE_OPERATOR_BASE_URL=https://api.moonshot.cn/v1、CODE_OPERATOR_MODEL=kimi-k3。可用 --max-model-rounds N 调整单次任务的模型轮次上限。
 
-二、特色
-独立实现 ModelClient、AgentLoop、六个本地工具和安全策略，使用模型原生 tool calling 完成读取、搜索、修改和真实测试闭环；支持协议白名单、错误回灌、完整回合裁剪、重复/连续失败终止、Ctrl-C 子进程清理和脱敏审计。
+一次性模式：python -m code_operator --workspace <WORKSPACE> "<TASK>"，执行后退出。交互模式：省略 <TASK>，在同一进程连续输入任务；只支持整行 /undo、/new、/exit。/undo 以后进先出方式撤销最近一次成功且确实改变文件的直接 write_file/edit_file，校验路径类型与外部哈希，不撤销 run_command；/new 清对话、读状态和撤销记录但不恢复文件。会话与撤销仅在内存中，无跨进程 Resume 或 checkpoint。
 
-三、安全边界
-文件工具限制真实路径并拒绝敏感文件和链接逃逸，以完整读取状态和哈希保护覆盖；命令使用参数数组、固定目录、超时、净化环境和审批。`--auto-approve-tests` 只信任明确的 pytest 命令。这些措施不构成 OS 沙箱，获批代码仍可能访问外部资源。
+项目独立实现 ModelClient、AgentLoop、六工具、策略、上下文和会话；不用 Agent SDK。支持原生 tool calling、ID 配对、完整组裁剪、中止后结果补齐、路径/敏感文件/链接逃逸防护、命令审批、超时、进程树终止和脱敏审计。应用层防护不构成 OS 沙箱。
 
-四、当前状态
-基础版 v0.1.0 已发布；当前 main 在 Windows/Python 3.11 有 348 项离线测试通过，GitHub Actions offline-tests 通过。固定订单价格流水线在 kimi-k3 的三个全新工作区 3/3 完成，测试哈希不变且只修改 pricing.py 和 invoice.py；这只是一个固定任务的三次样本，不代表整体成功率。CLI 默认显示脱敏、有界并转义终端控制字符的普通终端轨迹。Ubuntu 未验证。详细证据见 DESIGN.md、DEFENSE.md 和 REVIEW_LOG.md。
+Windows/Python 3.11 离线测试覆盖上述行为；kimi-k3 固定订单任务三个全新工作区 3/3 完成，只代表该样本。CLI 为脱敏、有界、终端安全的普通文本轨迹。Ubuntu、E4 真实 Session API 探针、真实窄终端中文编码行为和第一支完整录像未验证。详见 DESIGN.md、DEFENSE.md、REVIEW_LOG.md。

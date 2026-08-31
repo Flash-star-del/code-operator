@@ -53,7 +53,7 @@ def _call_result_signature(
             sort_keys=True,
             separators=(",", ":"),
         )
-    except (json.JSONDecodeError, TypeError):
+    except (json.JSONDecodeError, RecursionError, TypeError):
         normalized_arguments = arguments_raw
     return call_name, normalized_arguments, result_content
 
@@ -83,12 +83,19 @@ class AgentLoop:
         )
         self._audit = audit
         self._trace = trace
+        self._messages: list[dict[str, object]] = [
+            {"role": "system", "content": self._system_prompt}
+        ]
+
+    def reset(self) -> None:
+        self._messages = [
+            {"role": "system", "content": self._system_prompt}
+        ]
 
     def run(self, user_task: str) -> RunResult:
-        messages: list[dict[str, object]] = [
-            {"role": "system", "content": self._system_prompt},
-            {"role": "user", "content": user_task},
-        ]
+        current_user = {"role": "user", "content": user_task}
+        self._messages.append(current_user)
+        messages = self._messages
         model_rounds = 0
         tool_call_count = 0
         provider_tokens = 0
@@ -129,8 +136,12 @@ class AgentLoop:
             try:
                 prepared = self._context_manager.prepare(messages, tool_schemas)
             except ContextLimitError:
+                if model_rounds == 0 and self._messages[-1] is current_user:
+                    self._messages.pop()
+                    messages = self._messages
                 return result("CONTEXT_LIMIT")
             messages = prepared.messages
+            self._messages = messages
             try:
                 turn = self._client.complete(messages, tool_schemas)
             except KeyboardInterrupt:
@@ -153,11 +164,17 @@ class AgentLoop:
                     )
                 except Exception:
                     pass
-            messages.append(turn.to_replay_message())
+            if turn.tool_calls:
+                try:
+                    result_iterator = self._registry.iter_results(turn.tool_calls)
+                except ToolProtocolError:
+                    return result("PROVIDER_PROTOCOL_ERROR")
+            assistant_message = turn.to_replay_message()
 
             if turn.tool_calls:
+                user_aborted = False
                 if tool_call_count + len(turn.tool_calls) > self._max_tool_calls:
-                    failures = [
+                    tool_results = [
                         ToolResult(
                             tool_call_id=call.id,
                             name=call.name,
@@ -169,18 +186,62 @@ class AgentLoop:
                         for call in turn.tool_calls
                     ]
                 else:
+                    tool_results = []
+                    for _call in turn.tool_calls:
+                        try:
+                            tool_result = next(result_iterator)
+                        except KeyboardInterrupt:
+                            current_index = len(tool_results)
+                            current_call = turn.tool_calls[current_index]
+                            tool_results.append(
+                                ToolResult(
+                                    tool_call_id=current_call.id,
+                                    name=current_call.name,
+                                    ok=False,
+                                    error_code="USER_ABORTED",
+                                    message="工具执行被用户中止",
+                                    details={},
+                                )
+                            )
+                        else:
+                            tool_results.append(tool_result)
+                            if tool_result.error_code != "USER_ABORTED":
+                                continue
+                            current_index = len(tool_results) - 1
+                        tool_results.extend(
+                            ToolResult(
+                                tool_call_id=pending_call.id,
+                                name=pending_call.name,
+                                ok=False,
+                                error_code="NOT_EXECUTED_AFTER_ABORT",
+                                message="同轮较早的工具调用被中止，本调用未执行",
+                                details={},
+                            )
+                            for pending_call in turn.tool_calls[
+                                current_index + 1 :
+                            ]
+                        )
+                        user_aborted = True
+                        break
+                replayable_results: list[ToolResult] = []
+                tool_messages: list[dict[str, object]] = []
+                for call, tool_result in zip(
+                    turn.tool_calls, tool_results, strict=True
+                ):
                     try:
-                        failures = self._registry.execute_calls(turn.tool_calls)
-                    except KeyboardInterrupt:
-                        return result("USER_ABORTED")
-                    except ToolProtocolError:
-                        return result("PROVIDER_PROTOCOL_ERROR")
-                tool_call_count += len(turn.tool_calls)
-                repeated_limit_reached = False
-                failure_limit_reached = False
-                for call, tool_result in zip(turn.tool_calls, failures, strict=True):
-                    result_content = tool_result.to_message_content()
-                    messages.append(
+                        result_content = tool_result.to_message_content()
+                    except Exception:
+                        tool_result = ToolResult(
+                            tool_call_id=call.id,
+                            name=call.name,
+                            ok=False,
+                            error_code="TOOL_EXECUTION_ERROR",
+                            message="工具返回了无效结果",
+                            details={},
+                        )
+                        result_content = tool_result.to_message_content()
+                    replayable_results.append(tool_result)
+                    tool_messages.append(
                         {
                             "role": "tool",
                             "tool_call_id": tool_result.tool_call_id,
@@ -188,6 +249,15 @@ class AgentLoop:
                             "content": result_content,
                         }
                     )
+                tool_results = replayable_results
+                messages.extend([assistant_message, *tool_messages])
+                tool_call_count += len(turn.tool_calls)
+                repeated_limit_reached = False
+                failure_limit_reached = False
+                for call, tool_result, tool_message in zip(
+                    turn.tool_calls, tool_results, tool_messages, strict=True
+                ):
+                    result_content = str(tool_message["content"])
                     if self._audit is not None:
                         try:
                             self._audit.record_tool(call, tool_result)
@@ -199,7 +269,7 @@ class AgentLoop:
                         except Exception:
                             pass
                     if tool_result.error_code == "USER_ABORTED":
-                        return result("USER_ABORTED")
+                        user_aborted = True
                     if tool_result.ok:
                         consecutive_tool_failures = 0
                     else:
@@ -222,14 +292,20 @@ class AgentLoop:
                         repeated_call_results = 1
                     if repeated_call_results >= MAX_REPEATED_CALL_RESULTS:
                         repeated_limit_reached = True
-                if any(item.error_code == "TOOL_CALL_LIMIT" for item in failures):
+                if any(
+                    item.error_code == "TOOL_CALL_LIMIT"
+                    for item in tool_results
+                ):
                     return result("TOOL_CALL_LIMIT")
+                if user_aborted:
+                    return result("USER_ABORTED")
                 if repeated_limit_reached:
                     return result("REPEATED_CALL")
                 if failure_limit_reached:
                     return result("CONSECUTIVE_TOOL_FAILURES")
                 continue
 
+            messages.append(assistant_message)
             if turn.finish_reason == "length":
                 return result("OUTPUT_TRUNCATED", turn.content or "")
             if turn.finish_reason == "content_filter":

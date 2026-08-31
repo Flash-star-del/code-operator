@@ -6,9 +6,11 @@ import os
 import tempfile
 from pathlib import Path
 
+from code_operator.journal import ChangeJournal, ChangeRecord, UndoResult
 from code_operator.models import ToolResult
 from code_operator.policy import PathPolicyError, WorkspacePolicy
 from code_operator.redaction import Redactor
+from code_operator.trace import terminal_safe_text
 
 
 MAX_FILE_BYTES = 1_000_000
@@ -36,9 +38,11 @@ class FileTools:
         policy: WorkspacePolicy,
         *,
         redactor: Redactor | None = None,
+        journal: ChangeJournal | None = None,
     ) -> None:
         self.policy = policy
         self.redactor = redactor or Redactor([])
+        self.journal = journal
         self._complete_read_hashes: dict[Path, str] = {}
 
     def _relative(self, path: Path) -> str:
@@ -61,6 +65,225 @@ class FileTools:
             message=self.redactor.redact(message),
             details={} if details is None else details,
         )
+
+    def reset_read_state(self) -> None:
+        self._complete_read_hashes.clear()
+
+    def _undo_failure(
+        self,
+        change: ChangeRecord,
+        code: str,
+        message: object,
+    ) -> UndoResult:
+        remaining = 0 if self.journal is None else self.journal.depth
+        return UndoResult(
+            ok=False,
+            error_code=code,
+            message=terminal_safe_text(self.redactor.redact(message)),
+            path=change.path,
+            source_tool=change.source_tool,
+            remaining=remaining,
+        )
+
+    def _reverse_diff(
+        self,
+        change: ChangeRecord,
+        current: str,
+        restored: str,
+    ) -> tuple[str, bool]:
+        diff = "".join(
+            difflib.unified_diff(
+                current.splitlines(keepends=True),
+                restored.splitlines(keepends=True),
+                fromfile=f"a/{change.path}",
+                tofile=f"b/{change.path}",
+            )
+        )
+        safe_diff = terminal_safe_text(
+            self.redactor.redact(diff), multiline=True
+        )
+        return _truncate(safe_diff)
+
+    @staticmethod
+    def _atomic_restore(path: Path, content: str) -> None:
+        temporary_name: str | None = None
+        try:
+            with tempfile.NamedTemporaryFile(
+                mode="w",
+                encoding="utf-8",
+                newline="",
+                dir=path.parent,
+                prefix=f".{path.name}.",
+                suffix=".tmp",
+                delete=False,
+            ) as stream:
+                temporary_name = stream.name
+                stream.write(content)
+                stream.flush()
+                os.fsync(stream.fileno())
+            os.replace(temporary_name, path)
+            temporary_name = None
+        finally:
+            if temporary_name is not None:
+                Path(temporary_name).unlink(missing_ok=True)
+
+    @staticmethod
+    def _has_expected_restored_state(path: Path, change: ChangeRecord) -> bool:
+        if change.before_content is None:
+            return not path.exists()
+        if not path.exists() or not path.is_file() or change.before_hash is None:
+            return False
+        try:
+            return _sha256(path.read_bytes()) == change.before_hash
+        except OSError:
+            return False
+
+    @staticmethod
+    def _normalized_path_identity(path: Path) -> str:
+        return os.path.normcase(os.path.normpath(os.path.abspath(path)))
+
+    def _has_original_path_identity(self, change: ChangeRecord, resolved: Path) -> bool:
+        lexical = self.policy.workspace / Path(change.path)
+        return self._normalized_path_identity(
+            lexical
+        ) == self._normalized_path_identity(resolved)
+
+    def _apply_restored_read_state(
+        self, change: ChangeRecord, resolved: Path
+    ) -> None:
+        if change.before_hash is None:
+            self._complete_read_hashes.pop(resolved, None)
+        else:
+            self._complete_read_hashes[resolved] = change.before_hash
+
+    def _undo_success(
+        self,
+        change: ChangeRecord,
+        *,
+        clean_diff: str,
+        diff_truncated: bool,
+        interrupted: bool,
+    ) -> UndoResult:
+        assert self.journal is not None
+        message = (
+            "检测到中止，但文件撤销已经完成"
+            if interrupted
+            else "文件修改已撤销"
+        )
+        return UndoResult(
+            ok=True,
+            error_code=None,
+            message=message,
+            path=change.path,
+            source_tool=change.source_tool,
+            diff=clean_diff,
+            diff_truncated=diff_truncated,
+            remaining=self.journal.depth,
+        )
+
+    def _complete_undo(
+        self,
+        change: ChangeRecord,
+        *,
+        resolved: Path,
+        clean_diff: str,
+        diff_truncated: bool,
+        interrupted: bool = False,
+    ) -> UndoResult:
+        self._apply_restored_read_state(change, resolved)
+        assert self.journal is not None
+        self.journal.discard(change)
+        return self._undo_success(
+            change,
+            clean_diff=clean_diff,
+            diff_truncated=diff_truncated,
+            interrupted=interrupted,
+        )
+
+    def _reconcile_interrupted_undo(
+        self,
+        change: ChangeRecord,
+        *,
+        resolved: Path,
+        clean_diff: str,
+        diff_truncated: bool,
+        interruption: KeyboardInterrupt,
+    ) -> UndoResult:
+        if not self._has_expected_restored_state(resolved, change):
+            raise interruption
+        self._apply_restored_read_state(change, resolved)
+        assert self.journal is not None
+        if self.journal.peek() is change:
+            self.journal.discard(change)
+        return self._undo_success(
+            change,
+            clean_diff=clean_diff,
+            diff_truncated=diff_truncated,
+            interrupted=True,
+        )
+
+    def undo_last_change(self) -> UndoResult:
+        change = None if self.journal is None else self.journal.peek()
+        if change is None:
+            return UndoResult(False, "UNDO_EMPTY", "没有可撤销的文件修改")
+        try:
+            resolved = self.policy.resolve(change.path, for_write=True)
+        except PathPolicyError as error:
+            return self._undo_failure(change, "PATH_DENIED", error)
+        if not self._has_original_path_identity(change, resolved):
+            return self._undo_failure(
+                change,
+                "UNDO_CONFLICT",
+                "撤销目标的路径身份已发生变化",
+            )
+
+        if not resolved.exists() or not resolved.is_file():
+            return self._undo_failure(
+                change,
+                "UNDO_CONFLICT",
+                "撤销目标不存在或已不再是普通文件",
+            )
+        try:
+            current_raw = resolved.read_bytes()
+            current = current_raw.decode("utf-8")
+        except (UnicodeDecodeError, OSError) as error:
+            return self._undo_failure(change, "UNDO_READ_FAILED", error)
+        if _sha256(current_raw) != change.after_hash:
+            return self._undo_failure(
+                change,
+                "UNDO_CONFLICT",
+                "撤销目标在记录后已发生变化",
+            )
+
+        restored = "" if change.before_content is None else change.before_content
+        clean_diff, diff_truncated = self._reverse_diff(change, current, restored)
+        try:
+            if change.before_content is None:
+                resolved.unlink()
+            else:
+                if change.before_hash is None:
+                    return self._undo_failure(
+                        change,
+                        "UNDO_CONFLICT",
+                        "撤销记录缺少原文件摘要",
+                    )
+                self._atomic_restore(resolved, change.before_content)
+            return self._complete_undo(
+                change,
+                resolved=resolved,
+                clean_diff=clean_diff,
+                diff_truncated=diff_truncated,
+            )
+        except KeyboardInterrupt as interruption:
+            return self._reconcile_interrupted_undo(
+                change,
+                resolved=resolved,
+                clean_diff=clean_diff,
+                diff_truncated=diff_truncated,
+                interruption=interruption,
+            )
+        except OSError as error:
+            return self._undo_failure(change, "UNDO_WRITE_FAILED", error)
 
     def list_dir(
         self,
@@ -331,6 +554,16 @@ class FileTools:
 
         after_hash = _sha256(encoded)
         self._complete_read_hashes[resolved] = after_hash
+        if self.journal is not None and before_hash != after_hash:
+            self.journal.record(
+                ChangeRecord(
+                    path=relative,
+                    before_content=None if before_hash is None else before,
+                    before_hash=before_hash,
+                    after_hash=after_hash,
+                    source_tool="write_file",
+                )
+            )
         return ToolResult(
             tool_call_id=tool_call_id,
             name="write_file",
@@ -465,6 +698,16 @@ class FileTools:
 
         after_hash = _sha256(encoded)
         self._complete_read_hashes[resolved] = after_hash
+        if self.journal is not None and before_hash != after_hash:
+            self.journal.record(
+                ChangeRecord(
+                    path=relative,
+                    before_content=before,
+                    before_hash=before_hash,
+                    after_hash=after_hash,
+                    source_tool="edit_file",
+                )
+            )
         return ToolResult(
             tool_call_id=tool_call_id,
             name="edit_file",

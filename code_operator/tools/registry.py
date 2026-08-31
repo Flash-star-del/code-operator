@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import copy
 import json
-from collections.abc import Callable, Mapping, Sequence
+from collections.abc import Callable, Iterator, Mapping, Sequence
 
 from code_operator.models import ToolCall, ToolResult
 
@@ -222,7 +222,7 @@ def _validated_arguments(
 ) -> dict[str, object] | ToolResult:
     try:
         decoded = json.loads(call.arguments_raw)
-    except (json.JSONDecodeError, TypeError):
+    except (json.JSONDecodeError, RecursionError, TypeError):
         return _failure(call, "INVALID_ARGUMENTS", "arguments 必须是合法 JSON 对象")
     if not isinstance(decoded, dict):
         return _failure(call, "INVALID_ARGUMENTS", "arguments 必须是 JSON 对象")
@@ -270,13 +270,20 @@ class ToolRegistry:
     def tool_schemas(self) -> list[dict[str, object]]:
         return copy.deepcopy(_TOOL_SCHEMAS)
 
-    def execute_calls(self, calls: Sequence[ToolCall]) -> list[ToolResult]:
+    @staticmethod
+    def _validate_call_ids(calls: Sequence[ToolCall]) -> None:
         ids = [call.id for call in calls]
         if any(not isinstance(call_id, str) or not call_id.strip() for call_id in ids):
             raise ToolProtocolError("tool_call_id 不能为空")
         if len(ids) != len(set(ids)):
             raise ToolProtocolError("tool_call_id 在同一轮中必须唯一")
-        return [self._execute(call) for call in calls]
+
+    def iter_results(self, calls: Sequence[ToolCall]) -> Iterator[ToolResult]:
+        self._validate_call_ids(calls)
+        return (self._execute(call) for call in calls)
+
+    def execute_calls(self, calls: Sequence[ToolCall]) -> list[ToolResult]:
+        return list(self.iter_results(calls))
 
     def _execute(self, call: ToolCall) -> ToolResult:
         schema = self._schema_by_name.get(call.name)
@@ -300,7 +307,7 @@ class ToolRegistry:
         if not isinstance(result, ToolResult):
             return _failure(call, "TOOL_EXECUTION_ERROR", "工具返回了无效结果")
         if result.tool_call_id != call.id or result.name != call.name:
-            return ToolResult(
+            result = ToolResult(
                 tool_call_id=call.id,
                 name=call.name,
                 ok=result.ok,
@@ -308,4 +315,8 @@ class ToolRegistry:
                 message=result.message,
                 details=result.details,
             )
+        try:
+            result.to_message_content()
+        except (RecursionError, TypeError, ValueError):
+            return _failure(call, "TOOL_EXECUTION_ERROR", "工具返回了无效结果")
         return result

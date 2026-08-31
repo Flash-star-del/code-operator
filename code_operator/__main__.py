@@ -7,23 +7,21 @@ import sys
 from collections.abc import Mapping, Sequence
 from pathlib import Path
 
-from code_operator.audit import JsonlAudit
-from code_operator.client import ModelClient
 from code_operator.config import ConfigError, ProviderConfig, load_provider_config
-from code_operator.loop import AgentLoop, ModelLike, TraceLike
-from code_operator.models import RunResult, ToolResult
+from code_operator.journal import UndoResult
+from code_operator.loop import ModelLike, TraceLike
+from code_operator.models import RunResult
 from code_operator.policy import (
     ApprovalCallback,
-    CommandPolicy,
     PathPolicyError,
-    WorkspacePolicy,
 )
 from code_operator.redaction import Redactor
-from code_operator.tools.command import run_command
-from code_operator.tools.filesystem import FileTools
+from code_operator.session import AgentSession, build_tool_registry
 from code_operator.tools.registry import ToolRegistry
-from code_operator.tools.search import SearchTools
-from code_operator.trace import TerminalTrace, terminal_safe_text
+from code_operator.trace import TerminalTrace, _truncate, terminal_safe_text
+
+
+MAX_UNDO_DISPLAY_CHARS = 4000
 
 
 def build_registry(
@@ -35,42 +33,13 @@ def build_registry(
     ask_all: bool = False,
     auto_approve_tests: bool = False,
 ) -> ToolRegistry:
-    workspace_policy = WorkspacePolicy(workspace)
-    redactor = Redactor([config.api_key])
-    file_tools = FileTools(workspace_policy, redactor=redactor)
-    search_tools = SearchTools(workspace_policy, redactor=redactor)
-    command_policy = CommandPolicy(
-        workspace_policy.workspace,
+    return build_tool_registry(
+        config,
+        workspace,
         approve=approve,
+        environment=environment,
         ask_all=ask_all,
         auto_approve_tests=auto_approve_tests,
-    )
-    source_environment = os.environ if environment is None else environment
-
-    def command_handler(
-        *,
-        tool_call_id: str,
-        argv: list[str],
-        timeout_seconds: int = 30,
-    ) -> ToolResult:
-        return run_command(
-            tool_call_id=tool_call_id,
-            argv=argv,
-            timeout_seconds=timeout_seconds,
-            policy=command_policy,
-            redactor=redactor,
-            environment=source_environment,
-        )
-
-    return ToolRegistry(
-        {
-            "list_dir": file_tools.list_dir,
-            "read_file": file_tools.read_file,
-            "grep": search_tools.grep,
-            "write_file": file_tools.write_file,
-            "edit_file": file_tools.edit_file,
-            "run_command": command_handler,
-        }
     )
 
 
@@ -86,33 +55,17 @@ def run_task(
     auto_approve_tests: bool = False,
     trace: TraceLike | None = None,
 ) -> RunResult:
-    registry = build_registry(
+    with AgentSession(
         config,
-        workspace,
+        workspace=workspace,
         approve=approve,
+        client=client,
         environment=environment,
         ask_all=ask_all,
         auto_approve_tests=auto_approve_tests,
-    )
-    owned_client = ModelClient(config) if client is None else None
-    selected_client = owned_client if owned_client is not None else client
-    if selected_client is None:
-        raise RuntimeError("ModelClient 初始化失败")
-    audit = JsonlAudit(workspace, redactor=Redactor([config.api_key]))
-    try:
-        return AgentLoop(
-            selected_client,
-            registry,
-            max_model_rounds=config.max_model_rounds,
-            max_tool_calls=config.max_tool_calls,
-            context_window=config.context_window,
-            max_output_tokens=config.max_output_tokens,
-            audit=audit,
-            trace=trace,
-        ).run(task)
-    finally:
-        if owned_client is not None:
-            owned_client.close()
+        trace=trace,
+    ) as session:
+        return session.run(task)
 
 
 def _interactive_approval(
@@ -157,42 +110,7 @@ def build_parser() -> argparse.ArgumentParser:
     return parser
 
 
-def main(argv: Sequence[str] | None = None) -> int:
-    args = build_parser().parse_args(argv)
-    task = " ".join(args.task).strip()
-    if not task:
-        task = input("请输入编码任务：").strip()
-    if task.casefold() == "/exit":
-        return 0
-    if not task:
-        print("任务不能为空。", file=sys.stderr)
-        return 2
-    redactor: Redactor | None = None
-    try:
-        config = load_provider_config(
-            context_window=args.context_window,
-            max_output_tokens=args.max_output_tokens,
-            max_model_rounds=args.max_model_rounds,
-            max_tool_calls=args.max_tool_calls,
-        )
-        redactor = Redactor([config.api_key])
-        trace = TerminalTrace(redactor)
-        result = run_task(
-            config,
-            workspace=args.workspace,
-            task=task,
-            approve=lambda command_argv, command_cwd: _interactive_approval(
-                command_argv, command_cwd, redactor=redactor
-            ),
-            ask_all=args.ask_all,
-            auto_approve_tests=args.auto_approve_tests,
-            trace=trace,
-        )
-    except (ConfigError, PathPolicyError) as error:
-        redacted_error = str(error) if redactor is None else redactor.redact(error)
-        print(terminal_safe_text(redacted_error), file=sys.stderr)
-        return 2
-
+def _print_run_result(result: RunResult, redactor: Redactor) -> int:
     if result.final_text:
         safe_final_text = terminal_safe_text(
             redactor.redact(result.final_text), multiline=True
@@ -215,6 +133,253 @@ def main(argv: Sequence[str] | None = None) -> int:
     if result.status == "USER_ABORTED":
         return 130
     return 1
+
+
+def _confirm(message: str) -> bool:
+    return input(message).strip().casefold() in {"y", "yes", "允许"}
+
+
+def _local_command(text: str) -> str | None:
+    folded = text.strip().casefold()
+    return folded if folded in {"/undo", "/new", "/exit"} else None
+
+
+def _safe_single_line(value: object, redactor: Redactor) -> str:
+    return _truncate(
+        terminal_safe_text(redactor.redact(value)),
+        MAX_UNDO_DISPLAY_CHARS,
+        multiline=False,
+    )
+
+
+def _print_undo_result(result: UndoResult, redactor: Redactor) -> None:
+    print("[撤销] OK" if result.ok else "[撤销] ERROR")
+    tool = "-" if result.source_tool is None else _safe_single_line(
+        result.source_tool, redactor
+    )
+    path = "-" if result.path is None else _safe_single_line(result.path, redactor)
+    print(f"  tool={tool} path={path} remaining={result.remaining}")
+    if result.error_code is not None:
+        print(f"  error_code={_safe_single_line(result.error_code, redactor)}")
+    print(f"  message={_safe_single_line(result.message, redactor)}")
+    if result.ok and result.diff:
+        safe_diff = terminal_safe_text(redactor.redact(result.diff), multiline=True)
+        print("  reverse_diff:")
+        for line in _truncate(safe_diff, MAX_UNDO_DISPLAY_CHARS).split(chr(10)):
+            print(f"  {line}")
+
+
+def _load_config(args: argparse.Namespace) -> ProviderConfig:
+    return load_provider_config(
+        context_window=args.context_window,
+        max_output_tokens=args.max_output_tokens,
+        max_model_rounds=args.max_model_rounds,
+        max_tool_calls=args.max_tool_calls,
+    )
+
+
+def _create_session(args: argparse.Namespace) -> AgentSession:
+    config = _load_config(args)
+    redactor = Redactor([config.api_key])
+    try:
+        return AgentSession(
+            config,
+            workspace=args.workspace,
+            approve=lambda command_argv, command_cwd: _interactive_approval(
+                command_argv, command_cwd, redactor=redactor
+            ),
+            ask_all=args.ask_all,
+            auto_approve_tests=args.auto_approve_tests,
+            trace=TerminalTrace(redactor),
+        )
+    except ConfigError as error:
+        raise ConfigError(redactor.redact(error)) from error
+    except PathPolicyError as error:
+        raise PathPolicyError(redactor.redact(error)) from error
+    except OSError as error:
+        raise ConfigError(redactor.redact(error)) from error
+    except Exception as error:
+        raise RuntimeError(redactor.redact(error)) from error
+
+
+def _session_redactor(session: AgentSession) -> Redactor:
+    candidate = getattr(session, "_redactor", None)
+    return candidate if isinstance(candidate, Redactor) else Redactor([])
+
+
+def _print_error(error: BaseException, redactor: Redactor | None = None) -> None:
+    active_redactor = Redactor([]) if redactor is None else redactor
+    print(
+        terminal_safe_text(active_redactor.redact(error)),
+        file=sys.stderr,
+    )
+
+
+def _run_one_shot(args: argparse.Namespace, task: str) -> int:
+    redactor: Redactor | None = None
+    try:
+        config = _load_config(args)
+        redactor = Redactor([config.api_key])
+        trace = TerminalTrace(redactor)
+        result = run_task(
+            config,
+            workspace=args.workspace,
+            task=task,
+            approve=lambda command_argv, command_cwd: _interactive_approval(
+                command_argv, command_cwd, redactor=redactor
+            ),
+            ask_all=args.ask_all,
+            auto_approve_tests=args.auto_approve_tests,
+            trace=trace,
+        )
+    except (ConfigError, PathPolicyError) as error:
+        _print_error(error, redactor)
+        return 2
+    except Exception as error:
+        _print_error(error, redactor)
+        return 1
+
+    return _print_run_result(result, redactor)
+
+
+def _discard_warning(depth: int) -> str:
+    return (
+        f"警告：{depth} 条撤销记录将永久消失，文件保持当前状态且不会自动恢复。"
+    )
+
+
+def _run_interactive(args: argparse.Namespace) -> int:
+    session: AgentSession | None = None
+    exit_code = 0
+    primary_error = False
+    try:
+        while True:
+            try:
+                task = input("code-operator> ")
+            except KeyboardInterrupt:
+                print("\n已取消当前输入，可继续输入任务。")
+                continue
+            except EOFError:
+                if session is not None and session.undo_depth > 0:
+                    print(_discard_warning(session.undo_depth))
+                break
+
+            stripped = task.strip()
+            if not stripped:
+                print("任务不能为空，请继续输入。")
+                continue
+
+            command = _local_command(task)
+            if command is None and stripped.startswith("/"):
+                print("未知本地命令。支持：/undo、/new、/exit。")
+                continue
+
+            if command == "/exit":
+                if session is not None and session.undo_depth > 0:
+                    print(_discard_warning(session.undo_depth))
+                    try:
+                        if not _confirm("确认退出？[y/N] "):
+                            print("已取消退出。")
+                            continue
+                    except KeyboardInterrupt:
+                        print("\n已取消退出。")
+                        continue
+                    except EOFError:
+                        print(_discard_warning(session.undo_depth))
+                break
+
+            if command == "/undo":
+                if session is None:
+                    result = UndoResult(
+                        False,
+                        "UNDO_EMPTY",
+                        "当前会话没有可撤销的直接文件修改。",
+                    )
+                    _print_undo_result(result, Redactor([]))
+                else:
+                    try:
+                        undo_result = session.undo()
+                    except KeyboardInterrupt:
+                        print("\n撤销操作已取消；未确认恢复完成，请检查文件状态后重试。")
+                        continue
+                    _print_undo_result(undo_result, _session_redactor(session))
+                continue
+
+            if command == "/new":
+                if session is None:
+                    print("[新会话] 当前会话尚未初始化，无需重置。")
+                    continue
+                if session.undo_depth > 0:
+                    print(
+                        f"新建会话将丢失 {session.undo_depth} 条撤销记录，"
+                        "但不会恢复文件。"
+                    )
+                    try:
+                        if not _confirm("确认新建会话？[y/N] "):
+                            print("已取消新建会话。")
+                            continue
+                    except (KeyboardInterrupt, EOFError):
+                        print("\n已取消新建会话。")
+                        continue
+                session.reset()
+                print("[新会话] 已清空对话、读取状态和撤销记录；文件保持当前状态。")
+                continue
+
+            if session is None:
+                try:
+                    session = _create_session(args)
+                except (ConfigError, PathPolicyError) as error:
+                    _print_error(error)
+                    exit_code = 2
+                    primary_error = True
+                    break
+
+            redactor = _session_redactor(session)
+            try:
+                result = session.run(task)
+            except KeyboardInterrupt:
+                result = RunResult(
+                    status="USER_ABORTED",
+                    final_text="",
+                    model_rounds=0,
+                    tool_calls=0,
+                    provider_total_tokens=None,
+                    estimated_context_tokens=0,
+                )
+                _print_run_result(result, redactor)
+                continue
+            _print_run_result(result, redactor)
+    except Exception as error:
+        primary_error = True
+        _print_error(error, None if session is None else _session_redactor(session))
+        exit_code = 1
+    finally:
+        if session is not None:
+            try:
+                session.close()
+            except Exception as close_error:
+                _print_error(close_error, _session_redactor(session))
+                if not primary_error:
+                    exit_code = 1
+    return exit_code
+
+
+def main(argv: Sequence[str] | None = None) -> int:
+    args = build_parser().parse_args(argv)
+    if not args.task:
+        return _run_interactive(args)
+
+    task = " ".join(args.task).strip()
+    if not task:
+        print("任务不能为空。", file=sys.stderr)
+        return 2
+    command = _local_command(task)
+    if command == "/exit":
+        return 0
+    if command in {"/undo", "/new"}:
+        print(f"{command} 仅交互模式可用。", file=sys.stderr)
+        return 2
+    return _run_one_shot(args, task)
 
 
 if __name__ == "__main__":

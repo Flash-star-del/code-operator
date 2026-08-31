@@ -24,11 +24,27 @@ CODE_OPERATOR_MODEL=kimi-k3
 python -m pip install -r requirements.txt
 ```
 
-在一个单独的工作区执行任务：
+带位置参数时保持原有的一次性模式：执行一个任务后退出，适合脚本、CI 和可预测的退出码。
 
 ```bash
 python -m code_operator --workspace <WORKSPACE> "<TASK>"
 ```
+
+一次性模式中，`COMPLETED` 返回 0，`USER_ABORTED` 返回 130，其他运行终态返回 1，参数或配置错误返回 2。省略位置任务则进入同一进程内的交互会话；配置会延迟到首个普通任务才加载，单个任务失败后仍可回到提示符继续输入：
+
+```bash
+python -m code_operator --workspace <WORKSPACE>
+code-operator> 检查项目并修复失败测试
+code-operator> /undo
+code-operator> /new
+code-operator> /exit
+```
+
+交互模式只识别整行且不带参数的三个本地命令：`/undo` 撤销最近一次可撤销的直接文件修改，`/new` 清空当前内存会话，`/exit` 退出。未知命令或带参数形式会在本地拒绝；自然语言中的同名片段不会触发命令。
+
+会话历史与撤销记录都只存在于当前进程内，不提供跨进程 Resume，也不持久化 session、transcript 或 checkpoint。`/undo` 只覆盖成功且确实改变文件的直接 `write_file`/`edit_file`，采用后进先出顺序，最多保留 32 条记录及 8 MiB 旧 UTF-8 内容快照；新建文件会删除，既有文件会原子恢复。撤销前会重新检查当前路径仍为工作区内普通 UTF-8 文件，并核对修改后哈希；若文件被外部修改、替换或变为链接/目录则拒绝覆盖且保留记录。它不会撤销 `run_command` 或命令产生的外部副作用。成功撤销只会在下一次普通输入中注入一次有界本地事件，提醒模型重新读取文件，不会写入 JSONL audit。
+
+`/new` 清空对话、文件完整读取哈希、撤销栈和待注入事件，但不恢复文件、不清空已有 audit、不重新加载配置；存在撤销记录时默认拒绝并要求确认。`/exit` 同样会在存在撤销记录时默认拒绝并要求确认；EOF 会警告后退出。退出或确认 `/new` 后，撤销记录消失而文件保持当前状态。
 
 当前六个工具 `list_dir`、`read_file`、`grep`、`write_file`、`edit_file` 和 `run_command` 均已接入最小安全闭环。文件修改返回受限长度的 unified diff；命令默认显示参数数组和固定工作目录并要求人工批准。只有显式启用 `--auto-approve-tests` 时，未被工作区同名文件遮蔽的裸命令 `pytest` 或 `python -m pytest` 才会自动放行。
 
@@ -40,7 +56,9 @@ CLI 默认以普通纯文本输出模型轮次、工具名、脱敏后的参数�
 
 ## 安全边界
 
-已实现工作区真实路径限制、敏感文件拒绝、符号链接/目录联接逃逸检查、文件读取状态与哈希覆盖保护、命令审批、`shell=False`、固定工作目录、超时、输出上限、当前 Windows 场景的进程树终止和统一凭据脱敏。请求前会为输出预留空间并按完整工具回合裁剪上下文；极简审计只写脱敏执行摘要。这些措施是应用层防护，不构成操作系统沙箱；用户批准的代码仍可能访问网络或工作区外资源。
+已实现工作区真实路径限制、敏感文件拒绝、符号链接/目录联接逃逸检查、文件读取状态与哈希覆盖保护、命令审批、`shell=False`、固定工作目录、超时、输出上限、当前 Windows 场景的进程树终止和统一凭据脱敏。请求前会为输出预留空间并按完整工具回合裁剪上下文。交互会话有多个 user turn 时，先裁最旧的完整历史 turn，再裁当前 turn 中最旧的完整 assistant/tool group，始终不拆 tool call/result 配对；每次普通任务重新计算模型轮次、工具调用、连续失败、重复调用与 usage。极简审计只写脱敏执行摘要。这些措施是应用层防护，不构成操作系统沙箱；用户批准的代码仍可能访问网络或工作区外资源。
+
+同一模型轮次包含多个工具调用而发生中止时，已经完成的调用保留真实结果，当前调用返回 `USER_ABORTED`，尚未开始的调用返回 `NOT_EXECUTED_AFTER_ABORT`；所有结果继续按原工具 ID 和顺序一一配对，随后停止本次模型请求链。工具处理器主动返回 `USER_ABORTED` 时遵循同一规则。
 
 ## 人工审核
 
@@ -48,9 +66,9 @@ CLI 默认以普通纯文本输出模型轮次、工具名、脱敏后的参数�
 
 ## 开发状态
 
-执行顺序为 M0 -> P0 -> R0 -> M1 -> M2 -> M3 -> M4 -> E1/E2/E3。当前 Windows/Python 3.11 上完整离线测试通过；脚本化假模型覆盖读文件、搜索、两次修改、首次测试失败、再次测试成功和最终总结，并逐轮核对回放字段与工具 ID 配对。测试进程会拒绝未模拟的真实 socket 连接。
+执行顺序为 M0 -> P0 -> R0 -> M1 -> M2 -> M3 -> M4 -> E1/E2/E3；在项目作者明确延期第一支完整录像并批准设计后，继续实现 E4 同进程交互会话与有限文件 Undo。当前 Windows/Python 3.11 上离线测试已覆盖新增会话、撤销、上下文和中止配对；脚本化假模型覆盖读文件、搜索、两次修改、首次测试失败、再次测试成功和最终总结，并逐轮核对回放字段与工具 ID 配对。测试进程会拒绝未模拟的真实 socket 连接。
 
-2026-08-28 的隔离 buggy Python 项目真实验收使用 `kimi-k3`：初始独立测试为 2 失败、1 通过，Agent 只修改生产文件，最终独立复跑为 3 通过；状态 `COMPLETED`，共 6 轮、6 次工具调用，供应商报告 10,890 tokens。审计中未出现当前 API Key、Authorization 或 Bearer；脱敏结构化证据见 [`docs/evidence/m4-real-task.json`](docs/evidence/m4-real-task.json)。Ubuntu CI 尚未验证；`/history` 未注册。本地 token 值只是按计划公式计算的粗估，不是供应商 tokenizer 上界。详细设计和已验证边界见 `DESIGN.md`。
+2026-08-28 的隔离 buggy Python 项目真实验收使用 `kimi-k3`：初始独立测试为 2 失败、1 通过，Agent 只修改生产文件，最终独立复跑为 3 通过；状态 `COMPLETED`，共 6 轮、6 次工具调用，供应商报告 10,890 tokens。审计中未出现当前 API Key、Authorization 或 Bearer；脱敏结构化证据见 [`docs/evidence/m4-real-task.json`](docs/evidence/m4-real-task.json)。E4 没有新增真实 Session API 探针；Ubuntu CI、第一支完整录像、真实窄终端中文显示宽度与编码行为仍未验证。`/history` 和跨进程 Resume 未实现。本地 token 值只是按计划公式计算的粗估，不是供应商 tokenizer 上界。详细设计和已验证边界见 `DESIGN.md`。
 
 ## 黄金 Eval
 

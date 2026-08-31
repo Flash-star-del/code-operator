@@ -273,6 +273,60 @@ def test_bad_json_and_unknown_tool_return_matched_failures() -> None:
     ]
 
 
+def test_deeply_nested_json_returns_matched_invalid_arguments() -> None:
+    deeply_nested = "[" * 2_000 + "0" + "]" * 2_000
+    registry = ToolRegistry({})
+
+    [result] = registry.execute_calls(
+        [ToolCall("deep", "list_dir", deeply_nested)]
+    )
+
+    assert result == ToolResult(
+        tool_call_id="deep",
+        name="list_dir",
+        ok=False,
+        error_code="INVALID_ARGUMENTS",
+        message="arguments 必须是合法 JSON 对象",
+        details={},
+    )
+    assert json.loads(result.to_message_content())["error_code"] == "INVALID_ARGUMENTS"
+
+
+def test_unserializable_handler_result_becomes_safe_execution_failure() -> None:
+    private_value = object()
+
+    def handler(*, tool_call_id: str, **_: object) -> ToolResult:
+        return ToolResult(
+            tool_call_id=tool_call_id,
+            name="list_dir",
+            ok=True,
+            error_code=None,
+            message="unsafe",
+            details={"value": private_value},
+        )
+
+    registry = ToolRegistry({"list_dir": handler})
+
+    [result] = registry.execute_calls([call("list_dir", {}, call_id="unsafe")])
+
+    assert result == ToolResult(
+        tool_call_id="unsafe",
+        name="list_dir",
+        ok=False,
+        error_code="TOOL_EXECUTION_ERROR",
+        message="工具返回了无效结果",
+        details={},
+    )
+    content = result.to_message_content()
+    assert "object at" not in content
+    assert json.loads(content) == {
+        "ok": False,
+        "error_code": "TOOL_EXECUTION_ERROR",
+        "message": "工具返回了无效结果",
+        "details": {},
+    }
+
+
 @pytest.mark.parametrize(
     "calls",
     [
@@ -285,6 +339,64 @@ def test_empty_or_duplicate_call_ids_are_protocol_errors(calls: list[ToolCall]) 
 
     with pytest.raises(ToolProtocolError, match="tool_call_id"):
         registry.execute_calls(calls)
+
+
+def test_iter_results_validates_all_ids_before_yielding_in_order() -> None:
+    executed: list[str] = []
+
+    def handler(*, tool_call_id: str, **_: object) -> ToolResult:
+        executed.append(tool_call_id)
+        return ToolResult(
+            tool_call_id=tool_call_id,
+            name="list_dir",
+            ok=True,
+            error_code=None,
+            message="ok",
+            details={},
+        )
+
+    registry = ToolRegistry({"list_dir": handler})
+    results = list(
+        registry.iter_results(
+            [
+                call("list_dir", {}, call_id="one"),
+                call("list_dir", {}, call_id="two"),
+            ]
+        )
+    )
+
+    assert executed == ["one", "two"]
+    assert [item.tool_call_id for item in results] == ["one", "two"]
+
+
+@pytest.mark.parametrize(
+    "invalid_calls",
+    [
+        [
+            call("list_dir", {}, call_id="one"),
+            call("list_dir", {}, call_id=""),
+        ],
+        [
+            call("list_dir", {}, call_id="same"),
+            call("list_dir", {}, call_id="same"),
+        ],
+    ],
+)
+def test_iter_results_rejects_late_bad_id_before_any_handler_runs(
+    invalid_calls: list[ToolCall],
+) -> None:
+    executed: list[str] = []
+
+    def handler(*, tool_call_id: str, **_: object) -> ToolResult:
+        executed.append(tool_call_id)
+        raise AssertionError("整体 ID 校验前不得执行 handler")
+
+    registry = ToolRegistry({"list_dir": handler})
+
+    with pytest.raises(ToolProtocolError, match="tool_call_id"):
+        list(registry.iter_results(invalid_calls))
+
+    assert executed == []
 
 
 def test_tool_result_serializes_once_with_stable_content() -> None:

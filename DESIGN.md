@@ -100,6 +100,24 @@ E3 的终端轨迹由独立的 `TerminalTrace` 提供，和写入 `.code-operato
 
 该界面明确保持普通纯文本边界：无 Rich、ANSI、全屏 TUI、动画、鼠标交互、流式 tool-call 或完整日志展示。上述结果只证明当前 Windows/Python 3.11 的实现与这些自动化/人工样例，不泛化为所有终端兼容性。
 
+## E4 有界交互会话与文件 Undo 验证
+
+E4 在保留一次性入口的前提下新增同一进程内的多任务会话。带位置任务的 `python -m code_operator --workspace <WORKSPACE> "<TASK>"` 仍执行一次并退出：`COMPLETED`、`USER_ABORTED`、其他运行终态、参数或配置错误分别返回 0、130、1、2。省略位置任务才进入交互循环；配置和网络客户端延迟到首个普通任务创建，因此在未配置 Key 时仍可先执行 `/exit`。单次任务失败只输出该结果并返回提示符，Session 本身不因此结束。
+
+`AgentSession` 是 E4 的资源所有者：同一实例持有一个 ModelClient、可重入 AgentLoop、六工具 ToolRegistry、WorkspacePolicy、CommandPolicy、FileTools、ChangeJournal、JsonlAudit 和可选 TerminalTrace。调用方注入的 client 不由 Session 关闭；Session 自建 client 在退出时关闭。AgentLoop 在多次 `run()` 间保存协议有效的 messages，但每次 run 都重置模型轮次、工具调用数、连续失败、重复调用和 usage 计数。`/new` 调用 loop reset，并清除完整读取哈希、ChangeJournal 和待注入本地事件；它不恢复磁盘文件、不清除既有 audit、不重新加载配置。
+
+多 user turn 上下文仍使用原来的确定性字节估算和输出预留。消息先按 user turn 分组，每个 turn 内再按完整 assistant/tool group 分组：超预算时先移除最旧的完整历史 turn；只剩当前 turn 后，再移除其中最旧的完整 assistant/tool group，同时至少保留当前 user 与最新执行链。任何 assistant tool-call 与对应 tool result 都不会被拆开；最小集合仍超限则在请求模型前返回 `CONTEXT_LIMIT`，不生成模型摘要。
+
+顺序工具执行新增中止补齐规则。同一 assistant turn 中，已完成调用保留真实 ToolResult；正在执行的调用返回 `USER_ABORTED`；尚未开始的调用返回 `NOT_EXECUTED_AFTER_ABORT`。三类结果严格沿用原 tool call ID 和请求顺序，各一个且仅一个，随后立即停止本次模型请求链。工具 handler 主动返回 `USER_ABORTED` 与 Python `KeyboardInterrupt` 遵循相同配对规则；已发生的文件或命令副作用不会被伪装成未执行。
+
+`ChangeJournal` 是后进先出的内存栈，只记录成功且确实改变内容的直接 `write_file`/`edit_file`。每条记录保存规范化相对路径、来源工具、修改前 UTF-8 内容或“原文件不存在”、修改前哈希和修改后哈希；不改变模型可见 ToolResult，也不记录 `run_command` 副作用。容量常量为 `MAX_JOURNAL_ENTRIES = 32` 和 `MAX_JOURNAL_SNAPSHOT_BYTES = 8 * 1024 * 1024`；越界时从最旧记录开始淘汰。
+
+`/undo` 在本地执行，不调用模型，也不写入 JSONL audit。恢复前重新经过工作区与敏感路径策略，要求目标身份与记录一致、仍是普通 UTF-8 文件且当前哈希等于记录的修改后哈希；外部修改、链接/目录替换、解码失败或路径拒绝都会拒绝覆盖并保留栈顶记录。原先不存在的文件在验证后删除，原有文件通过同目录临时文件和原子替换恢复；成功后输出经过脱敏、终端安全处理和长度限制的反向 diff。成功撤销会把一条有界本地 user 事件排入下一次普通任务；事件中的路径经过脱敏、终端安全处理并限制为最多 500 字符，提醒模型文件状态已经变化且编辑前必须重新读取。该事件消费一次，若请求前即因上下文超限则重新排队。
+
+交互控制只识别整行、忽略首尾空白及大小写、且不带参数的 `/undo`、`/new`、`/exit`。未知斜杠命令和带参数形式在本地拒绝，自然语言正文里的同名片段不触发。存在撤销记录时，`/new` 与 `/exit` 默认拒绝并要求显式确认；拒绝后继续会话。确认 `/new` 或退出会丢弃撤销能力，但文件保持当前状态；EOF 会先警告再退出。
+
+E4 的安全与输出边界没有扩张：API Key 仍只从环境变量读取；所有本地展示继续经过脱敏、终端安全编码和有界截断，最终模型回答维持既有输出约定；Undo 不新增 audit schema。没有 Agent SDK、Agent 框架或第三方 Agent 生产代码复用。明确未实现跨进程 Resume、`/history`、session/transcript/checkpoint 持久化、命令或外部副作用回滚、流式输出、Rich/全屏 TUI，也未执行新的 E4 真实 Session API 探针。第一支完整录像、Ubuntu CI 和真实窄终端中文显示宽度/编码仍未验证。
+
 ## 提示、工具描述与顺序执行
 
 system prompt 负责跨工具、跨轮次的不变量：先检查再修改、依据真实工具结果继续、测试失败不得宣称完成、遵守审批和路径边界。每个工具的 `description` 只说明该工具的局部用途、参数和输出限制，帮助模型在当前轮选择正确函数。两者不能互相替代：把所有细节塞进 system prompt 会增加上下文并形成重复事实源，只依赖 description 又无法表达跨轮终止和诚实总结。无论哪一层都不是安全边界，路径、参数、审批和终止仍由代码验证。
@@ -117,7 +135,7 @@ M1 的三核心工具采用稳定结果契约：`read_file` 返回规范化相�
 - **影子 Git：** 自动初始化、暂存或回滚会污染用户仓库并制造隐藏状态；基础版直接工作于用户指定目录，只把 Git 当普通受策略约束的命令。
 - **模型自动摘要：** 摘要会额外调用模型、丢失可验证细节并产生不可确定历史；超预算时只裁剪最旧完整回合，最低集合仍超限则停止。
 - **并行工具：** 并行写入、读取后编辑和审批顺序需要冲突合并语义；基础版顺序执行以保持状态可解释，接受延迟代价。
-- **Resume/会话恢复：** 持久会话需要版本化消息、工具副作用和凭据生命周期；题目基础闭环不要求，当前每次 CLI 运行是独立任务。
+- **跨进程 Resume/会话恢复：** 持久会话需要版本化消息、工具副作用和凭据生命周期。E4 只在一个 CLI 进程中保留内存历史；进程结束后不能恢复，也没有 transcript/checkpoint 文件。
 
 ## 开源经验校准与独立实现边界
 
@@ -129,4 +147,4 @@ R0 的固定来源、commit、许可证、阅读文件、采用/拒绝决策和�
 
 ## 未选择方案
 
-不实现文本 JSON 工具协议、任意供应商字段透传、通用 Shell、工具并行、子 Agent、服务端代码或文件工具、会话 Resume、影子 Git 仓库和模型生成的历史摘要；不依赖 Agent SDK、Agent 框架或第三方 Agent 运行时。核心逻辑与 system prompt 均独立实现。
+不实现文本 JSON 工具协议、任意供应商字段透传、通用 Shell、工具并行、子 Agent、服务端代码或文件工具、跨进程 Resume、影子 Git 仓库和模型生成的历史摘要；不依赖 Agent SDK、Agent 框架或第三方 Agent 运行时。核心逻辑与 system prompt 均独立实现。
