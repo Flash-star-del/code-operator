@@ -321,3 +321,28 @@
 - 审核依据：项目作者对研究方向、双轨横评、任务评分、内部消融、时间门槛和修订合并方案的逐段批准，以及最终明确回复 `RESEARCH-DESIGN-002 人工审核通过`
 
 本记录只覆盖上述研究设计，不扩大外部安装、真实 API、实现提交、远端推送或最终提交权限。
+
+<a id="research-plan-001"></a>
+
+## RESEARCH-PLAN-001：可靠性研究与三系统横评 TDD 实施计划
+
+- 审核状态：人工审核通过
+- 审核人：项目作者（通过当前协作任务明确确认）
+- 目标提交：`docs(research): plan reliability and agent comparison study`
+- 基线提交：`3e8542c docs(research): design reliability and agent comparison study`
+- 审核范围：研究执行总控计划，以及 O1 E4 真实 Session 探针、48 行确定性可靠性消融、code-operator/Claude Code/Kimi Code 三系统横评、研究综合与条件性 Ubuntu 四份 TDD 子计划；同时覆盖仓库外 v4.5 根计划新增 E6 里程碑和原 E5 合并口径
+- 固定执行顺序：`O1 -> 内部消融 -> 三系统 Pilot -> 18 个正式 Track A 单元 -> 只修复可复现根因 -> 自动报告 -> 条件性 Ubuntu -> 18:00 冻结`；原 O5 `/history`、持久化 Session 和跨进程 Resume 取消
+- 研究冻结内容：O1 精确合成 fixture 与两回合提示；6 个上下文、9 个中止、9 个错误场景的 48 行两臂结果；T1/T2/T3 初始代码、可见测试、精确任务文字和隐藏评分语义；固定种子 `20260901`、15 分钟单元超时、3 个 Pilot、18 个正式单元及条件性 T2 Track B 四单元
+- TDD 与失败处理：所有 runner、schema、fixture、隔离、grader、adapter 和分析器均按“先写失败测试并确认 RED、最小实现、确认 GREEN、全量回归”拆分；真实实验只保留冻结结果，只有 harness/fixture/grader/隔离缺陷才能废弃完整受影响平衡区组，不允许选择性重跑低分单元
+- 数据与权限边界：计划不授权安装或登录 Kimi Code，不授权向 Moonshot/Anthropic/OpenAI/DeepSeek 发送数据；O1、Pilot、正式 18 单元、Track B 和可选系统均需分别展示完整合成外发范围并取得新的明确授权；本地不保留完整 prompt、响应、reasoning、stdout/stderr、凭据或临时绝对路径
+- 时间与降级门槛：14:00 后只修复提交阻塞级安全/凭据/协议/核心执行缺陷；16:00 前主体研究与报告预览未完成则不启动 Ubuntu；Ubuntu 最多 60 分钟并于 17:00 停止；18:00 无条件冻结功能和研究变更；可选 Deep Code/DeepSeek、Codex、真实错误回灌和 Ubuntu 按固定顺序降级，不削减三套必做系统或 18 个正式单元
+- 文档自检：五份计划共 1,681 行、75,989 字节；相对链接均存在，代码围栏成对，必需 Implementation Plan 头、Goal/Architecture/Tech Stack 和复选框结构齐全；TBD、TODO、FIXME、未定义函数体、尾随空白及不存在的生产测试命令命中数为 0；`git diff --check` 退出码 0
+- 文件校验：总控计划 SHA-256 `472DEDFB9505D621388771745E4688F42FC3745C167416CCE1B0B9CE172064AD`；O1 计划 `49448CFE95097351813852914D30D44279FA7106C7D9A821D4CF1D3580F06917`；消融计划 `05F99C90E880D84743ACB268491E1687C44CB817AEAB9664ABC59B67E602B97D`；横评计划 `795FC5588E7C6ECECECDE473CC7506068A08BC4A16A284393DBC346E6EDBD0C6`；综合计划 `EB1916A625D9EEE66CD1AA9AC462D2A826DF295A248F3685D29AD97FEB462CA9`
+- 基线验证：最终暂存候选重新运行 `python -m pytest -q` 得到 `471 passed in 48.62s`；提交预检专项 22 项通过；`python -m compileall -q code_operator evals scripts tests` 退出码 0；通用 API Key/Bearer/私钥模式在五份计划中的命中文件数为 0
+- 依赖与开源边界：本里程碑不修改生产代码、测试或依赖；外部产品只通过公开 CLI 做系统级黑盒比较，不读取、复制或翻译移植其 Agent 源码，不引入 Agent SDK/框架；生产核心继续保持独立实现
+- 已知限制：本审核只批准书面执行计划；尚未创建研究 fixture/runner/grader、安装 Kimi Code、确认 Claude/Kimi 安全非交互配置、调用真实模型、运行 O1/Pilot/正式横评/Track B/Ubuntu 或生成研究结果；录像、ZIP 和最终上传仍未完成
+- 审核结论：通过；确认五份计划及根计划 E6 口径可以纳入本地计划提交并作为后续逐项执行依据；本结论不授权研究实现、外部安装/登录、数据出境或远端推送
+- 审核时间：2026-09-01 01:20:03 +08:00
+- 审核依据：项目作者明确回复 `RESEARCH-PLAN-001 人工审核通过`；五份计划完整内容、结构/路径/时间/证据命名自检、471 项全量离线测试、22 项提交预检、编译/差异/凭据形态检查
+
+本记录只覆盖上述研究实施计划，不扩大实现、外部安装、真实 API、远端推送或最终提交权限。
