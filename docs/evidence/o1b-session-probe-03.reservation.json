@@ -1,0 +1,40 @@
+{
+  "attempt_index": 3,
+  "created_at": "2026-09-01T16:02:13.778851+00:00",
+  "metadata": {
+    "config": {
+      "ask_all": true,
+      "auto_approve_tests": false,
+      "base_url": "https://api.moonshot.cn/v1",
+      "context_window": 32000,
+      "http_timeout_seconds": {
+        "connect": 10.0,
+        "pool": 10.0,
+        "read": 60.0,
+        "write": 30.0
+      },
+      "httpx_version": "0.28.1",
+      "max_model_rounds": 16,
+      "max_output_tokens": 8000,
+      "max_tool_calls": 32,
+      "model": "kimi-k3",
+      "platform": "Windows-10-10.0.26200-SP0",
+      "pytest_version": "8.4.2",
+      "python_implementation": "CPython",
+      "python_version": "3.11.5",
+      "test_command": [
+        "python",
+        "-m",
+        "pytest",
+        "-q"
+      ],
+      "test_timeout_seconds": 60
+    },
+    "evaluator_protocol_sha256": "d421044198537e120a699a5602479756a0d8bf5494bec9b6a2104b1719d72682",
+    "fixture_sha256": "a385c03528d2d55bff710dac768c2a95c90ab2fc7b2dfd861d11b5951612bdea",
+    "production_tree_sha256": "1ab8b89f627b46580858c6947a6d334d809d28af34d5bbcc25704f32e7fa1c58",
+    "prompt_sha256": "12207b9f697d5e0ae106dea07d030300f0b02dd4bb70ea53b1db36d7c6a9e688",
+    "target_initial_sha256": "a890f9a8d4838a0a27d122308e63869d11ed00e756673eb8c1f02cf6b8c30bfc"
+  },
+  "protocol_version": "o1b-v1"
+}

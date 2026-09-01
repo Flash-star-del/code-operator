@@ -346,3 +346,114 @@
 - 审核依据：项目作者明确回复 `RESEARCH-PLAN-001 人工审核通过`；五份计划完整内容、结构/路径/时间/证据命名自检、471 项全量离线测试、22 项提交预检、编译/差异/凭据形态检查
 
 本记录只覆盖上述研究实施计划，不扩大实现、外部安装、真实 API、远端推送或最终提交权限。
+
+<a id="o1-001"></a>
+
+## O1-001：E4 真实 Session 探针实现与单次结果
+
+- 审核状态：人工审核通过
+- 审核人：项目作者（通过当前协作任务明确确认）
+- 目标提交：`test(research): add real session probe evidence`
+- 基线提交：`cc2ab85 docs(research): plan reliability and agent comparison study`
+- 审核范围：冻结 greeting fixture 与两段提示、`evals/run_session_probe.py`、对应离线测试、获批研究仪器勘误、原始真实报告、根 v4.5 计划状态和本台账条目；不修改生产代码或依赖
+- 研究仪器边界：所有动作仍经公开 `AgentSession` 接口；Eval runner 只读取 Reset 私有状态的元素数量并对真实自有客户端 `close()` 做委托计数，不保存消息、路径、哈希映射或事件正文；内部结构漂移和进程扫描失败均 fail-closed。项目作者已明确回复 `批准修订 O1 计划，允许评测器只读观测私有状态并包装 close 计数`
+- TDD 证据：runner 缺失、双轮状态机缺失、CLI/安全写入缺失均先观察 RED；规格和质量复核继续用失败测试关闭 blanket approval、`write_file` 替代 `edit_file`、额外只读工具、同内容写入、运行时条目、损坏 junction、Toolhelp 不完整枚举、argparse Key 回显、UNC/设备路径、报告目录竞态与误删、未知异常泄漏，以及生命周期报告早于 close 冻结等问题
+- 离线验证：O1 专项 `96 passed, 5 skipped`；Session/Loop/CLI 组合 `218 passed, 5 skipped`；全量 `567 passed, 5 skipped`；提交预检 `22 passed`；compileall、fixture `VALID` 和 `git diff --check` 通过。5 项跳过均为当前 Windows 权限不支持的符号链接场景，真实 NTFS junction 回归已执行
+- 数据授权与单次运行：项目作者在收到完整 fixture、prompt、system/tool/history 可能外发范围、Moonshot 保留边界、配置、超时和扫描结果后，明确回复 `允许将上述完整合成数据发送到 Moonshot API，并运行一次 kimi-k3 O1 真实 Session 探针`；只运行一次，未重试
+- 原始真实结果：`docs/evidence/e4-session-probe.json` 为 `FAIL / ACTIVE_SUBPROCESS`；第一回合 `COMPLETED`，5 轮、5 次工具调用、供应商 usage 6,908 tokens，owned-client close 次数 1，活动子进程计数 1，总耗时 37.984 秒；未进入第二回合、Undo 或 Reset。原始报告保持不变，SHA-256 为 `D8AE19956B3CF3A624F31D1DFC4A6AAA653110CCE7FDFF5AF9D5D2B0D09E75F0`
+- 审查后分类：隐藏 `Start-Process` 外层超时包装可重复地产生一个 `conhost.exe` 直接子进程，直接启动计数为 0，因此 raw `ACTIVE_SUBPROCESS` 不作为 Agent 工具进程泄漏证据；但首轮 5 次调用必然不满足冻结的 `read_file -> edit_file -> run_command` 精确三事件轨迹，样本仍为 `FAIL_MODEL_BEHAVIOR_WITH_OUTER_WRAPPER_CONFOUNDER`。该结果不并入三系统横评统计，也不触发生产缺陷修复分支
+- 安全扫描：报告 JSON 有效，三个非空哈希均为 64 位小写十六进制；当前 API Key、Bearer、Authorization、私钥头、完整 prompt、本地绝对路径在报告中的命中均为 0；当前 Key 在完整候选中的精确命中为 0；报告临时文件、诊断临时文件和 Session fixture 缓存均为 0
+- 独立复核：Task 1–3 均完成实现、规格与质量复核；计划勘误复核为 `FINAL REVIEW APPROVED`；真实结果双层分类复核为 `RESULT REVIEW APPROVED`，确认不修改原始报告、不重跑、不把外层混杂误称为生产资源泄漏
+- 已知限制：本次样本没有完成第二回合、Undo 和 Reset，不能支持 H0 成功，也不是成功率；raw failure code 受外层 Windows 控制台宿主混杂。报告创建于 `2026-09-01 18:14:36 +08:00`，晚于预注册的 18:00 无条件冻结；项目作者后来的精确数据授权只作为这一次 O1 例外，不代表 O1 按原时间表完成，也不授权冻结后继续消融、Pilot、正式横评或重试。Ubuntu、三系统 Pilot/正式横评、研究报告和完整录像仍未执行
+- 审核结论：通过；认可 O1a 实现、原始失败结果、外层包装混杂诊断、验证证据与已知限制可作为 evidence-only 检查点纳入本地提交。该通过不把 O1a 解释为 Session 成功，不授权重跑、其他研究或远端 push
+- 审核时间：2026-09-02 01:13:04 +08:00
+- 审核依据：项目作者在收到 O1a + O1b 统一审核包后明确回复 `O1-001、O1B-IMPLEMENTATION-001、O1B-RESULT-001 人工审核通过`
+
+本审核只认可上述 O1 evidence-only 检查点，不扩大真实 API、后续外部实验、生产修改、远端推送或标签权限。
+
+<a id="o1b-design-001"></a>
+
+## O1B-DESIGN-001：真实 Session 复现实验修订设计
+
+- 审核状态：人工审核通过
+- 审核人：项目作者（通过当前协作任务明确确认）
+- 目标提交：`docs(research): design O1b session replication`
+- 基线提交：`cc2ab85 docs(research): plan reliability and agent comparison study`
+- 审核范围：`docs/superpowers/specs/2026-09-01-o1b-session-replication-design.md` 的 O1a/O1b 证据分离、主要 Session 判据、次要理想轨迹、进程基线差分、固定三次 reservation、版本/配置冻结、结果分类、失败处置、数据边界和 TDD 门禁
+- 核心修订：O1a 原始失败报告保持不变；O1b 将 Session 语义正确性与理想最短轨迹分开报告；最多三个 outbound attempt 均需先排他持久化 reservation，编号不得复用，提前停止和缺失结果均如实进入汇总
+- 研究有效性：生产 tree、Eval 执行闭包、fixture、prompt、模型参数、超时、Python/httpx/pytest 与平台均冻结并跨 attempt 校验；生产变化进入 O1c，评测协议变化进入新协议队列，不混合不同版本
+- 进程边界：只报告相对基线新出现且结束时仍存活的直接子进程计数，不保存 PID/名称/命令行，不把非零差分未经归因写成 Agent 泄漏
+- 结果口径：只报告原始计数；有效样本至少 2 个且至少 2 个主要 PASS 才为 `O1B_SUPPORTED`，一个主要 PASS 为 `MIXED`，全部失败为 `NOT_SUPPORTED`，有效样本少于 2 个为 `INCONCLUSIVE`；理想轨迹另报且不能选择性省略
+- 权限边界：项目作者撤销 O1 的 18:00 时间冻结并批准本设计，但该审核不授权 Moonshot 数据出境、真实运行、其他研究阶段、外部安装、本地实现提交或远端推送
+- 自检与复核：最终文档 124 行；无 TBD/TODO/FIXME 或尾随空白；`git diff --check` 通过；独立规格复核结论为 `O1B DESIGN REVIEW APPROVED`
+- 审核结论：通过；可以把书面设计纳入本地设计提交，并据此制定详细 TDD 实施计划
+- 审核时间：2026-09-01 18:57:34 +08:00
+- 审核依据：项目作者明确回复 `O1B-DESIGN-001 人工审核通过`；书面设计、两轮独立规格复核及上述自检证据
+
+本审核只覆盖 O1b 书面设计，不授权实现提交、真实 API、其他外部实验或远端推送。
+
+<a id="o1b-plan-001"></a>
+
+## O1B-PLAN-001：真实 Session 复现实验实施计划
+
+- 审核状态：人工审核通过
+- 审核人：项目作者（通过当前协作任务明确确认）
+- 目标提交：`docs(research): plan O1b session replication`
+- 基线提交：`259cf67 docs(research): design O1b session replication`
+- 审核范围：`docs/superpowers/plans/2026-09-01-o1b-session-replication-implementation.md` 的基线冻结、reservation/版本哈希、双层判据、进程差分、固定 attempt/提前停止汇总、CLI、安全扫描、真实运行门禁与人工审核步骤
+- TDD 结构：Task 0 固定 O1a 基线；Task 1–4 每项明确失败测试、RED、最小实现、GREEN、规格复核和质量复核；Task 5 执行专项/组合/全量/编译/预检/扫描，并在外发授权处停止
+- 关键顺序：真实模式先完成纯本地校验和 reservation 排他落盘复读，再进入 `run_probe(client=None)`；客户端继续由 `AgentSession` 拥有、幂等关闭和计数，不因评测外壳丢失生命周期证据
+- 结果边界：主要 Session 判据与 ideal trace 分开；O1a 原始报告字节和哈希保持不变；固定三个 attempt 全部保留，提前停止不伪造未执行结果；不同生产或评测协议版本不混样
+- 权限边界：计划审核只授权离线 Eval/TDD 实施和本地验证，不授权创建正式 reservation、调用 Moonshot、安装外部工具、开展其他研究、提交实现或远端推送
+- 自检：最终计划 569 行、48 个代码围栏；无 TBD/TODO/FIXME、模糊占位符或尾随空白；`git diff --check` 通过；项目作者审核前的计划 SHA-256 为 `79C9A0C8503EB6603172EA8EB2A74C6C85190D03F698A59CAF8754EDCC2B5E6F`
+- 独立评审限制：一次独立子 Agent 计划评审因当时额度用尽未返回，未伪造批准；主审随后发现并修正了外层 client factory 会破坏 owned-client 证据的问题，最终仍由项目作者完成书面审核
+- 审核结论：通过；允许据此开始离线 TDD，完成后仍需独立规格/质量/总审与新的实现人工审核
+- 审核时间：2026-09-01 19:18:09 +08:00
+- 审核依据：项目作者明确回复 `O1B-PLAN-001 人工审核通过`；完整计划、自检证据和已批准的 `O1B-DESIGN-001`
+
+本审核不授权真实 API、正式 O1b reservation、实现提交、其他研究阶段或远端 push。
+
+<a id="o1b-implementation-001"></a>
+
+## O1B-IMPLEMENTATION-001：O1b 离线实现与总验证候选
+
+- 审核状态：人工审核通过
+- 审核人：项目作者（通过当前协作任务明确确认）
+- 目标提交：`test(research): add real session probe evidence`
+- 基线提交：`7f41171 docs(research): plan O1b session replication`
+- 审核范围：O1b Task 5 Step 1–3 的离线验证、证据不变量检查、事实计划收敛、根计划开放范围和本候选台账；不包含真实 Moonshot 运行、正式 reservation/result/summary、消融、横评、Track B、Ubuntu、提交或推送
+- 离线验证：`python -m pytest -q tests/test_session_probe.py` 为 `181 passed, 7 skipped in 108.46s`；Session/Loop/CLI 组合为 `303 passed, 7 skipped in 110.81s`；`python -m pytest -q` 为 `652 passed, 7 skipped in 167.69s`；`python -m compileall -q code_operator evals scripts tests` 退出码 0；`tests/test_submission_preflight.py` 为 `22 passed in 0.47s`；`git diff --check` 退出码 0（仅有 LF/CRLF 转换提示）
+- 跳过项：7 项均为 Windows `WinError 1314`，因当前权限不允许创建合成符号链接；分别覆盖 manifest 哈希链接拒绝、evidence 根目录链接、fixture 根链接、fixture 后代链接、workspace 链接和报告目录链接两项；真实 NTFS junction 回归执行且未因该权限跳过
+- 证据不变量：O1a `docs/evidence/e4-session-probe.json` SHA-256 仍为 `D8AE19956B3CF3A624F31D1DFC4A6AAA653110CCE7FDFF5AF9D5D2B0D09E75F0`；O1b reservation、单次结果和 summary 均不存在；清理验证后仓库内 `__pycache__`、`.pytest_cache`、`.pyc/.pyo`、`.tmp/.part` 均为 0，evidence 临时/诊断文件名为 0；`code_operator/` 与 `requirements.txt` 相对基线无改动
+- 安全与隐私扫描：`CODE_OPERATOR_API_KEY` 仅作为不透明环境变量用于精确匹配，值未打印；在 94 个仓库候选文件及根 v4.5 计划中的精确命中为 0。O1b evidence 文件数为 0，故其中 API Key/Bearer/Authorization/私钥头、绝对路径和敏感字段命中均为 0。仓库通用模式扫描发现既有合成脱敏测试/计划文本的 Bearer 23、Authorization 10、私钥头 1，不能将仓库泛模式计数写成 0，也未发现真实凭据值
+- 事实边界：本次结果只支持 O1b 离线 evaluator/协议实现和运行前门禁；不支持真实 Session 稳定性、成功率或任何横评结论。O1a 仍作为独立失败 evidence-only 候选，`O1-001` 保持待审核
+- 最终独立评审：`O1B OFFLINE REVIEW APPROVED`；规格一致性、代码质量、安全/隐私、研究有效性和 O1a 原始不变性分别通过。研究有效性仅限离线 evaluator、协议实现和运行前门禁，安全结论保留既有合成模式命中限制；独立复跑产生的可再生缓存已安全清理。该独立结论不表示项目作者人工审核通过，不授权创建 O1b evidence、真实 API、其他研究阶段、提交或远端 push
+- 审核结论：通过；认可 O1b 离线 evaluator/协议实现、TDD 证据、总验证和运行前门禁可与真实失败 evidence 一并纳入本地提交。该通过不表示真实 Session 成功，不授权其他研究或远端 push
+- 审核时间：2026-09-02 01:13:04 +08:00
+- 审核依据：O1b Task 5 Step 1–3 的新鲜命令输出、哈希/文件状态检查、缓存清理复核、事实文档差异、独立离线总审结论，以及项目作者明确回复 `O1-001、O1B-IMPLEMENTATION-001、O1B-RESULT-001 人工审核通过`
+
+本审核只认可 O1b 离线实现与门禁纳入本地提交，不扩大真实 API、外部实验、生产修改、远端推送或标签权限。
+
+<a id="o1b-result-001"></a>
+
+## O1B-RESULT-001：O1b 三次真实 Session 结果候选
+
+- 审核状态：人工审核通过
+- 审核人：项目作者（通过当前协作任务明确确认）
+- 目标提交：`test(research): add real session probe evidence`
+- 基线提交：`7f41171 docs(research): plan O1b session replication`
+- 授权边界：项目作者在收到完整 fixture、两段 prompt、system/tool/history 动态范围、endpoint/model、三次固定 attempt、逻辑请求与重试上界、参数、停止规则、不会发送的数据、报告字段及费用/随机性风险后，明确允许向 Moonshot `kimi-k3` 串行运行最多三个 O1b attempt；该授权不包含第四次、其他数据、其他模型、消融、横评、提交或 push
+- 运行顺序：固定 `01 -> 02 -> 03` 串行完成；每次联网前先排他写入并复读 reservation，三个编号均未复用，实验 attempt 未重跑；生产哈希、evaluator/protocol 哈希和非敏感配置跨三次一致
+- 单次结果：attempt 01/02/03 均为有效 `FAIL / UNEXPECTED_COMMAND`；模型轮次 `7/8/8`，工具调用 `7/8/8`，供应商 usage `11000/13147/13314` tokens，耗时约 `65.671/105.078/85.547` 秒。三次均在第一回合 `COMPLETED` 后因出现非冻结命令而停止，未进入第二回合、Undo 或 Reset；报告不保存命令 payload，不能臆测具体命令
+- 资源证据：三次 `baseline_direct_subprocess_count=0`、`new_residual_direct_subprocess_count=0`、`close_idempotent=true`、`owned_client_close_calls=1`、`session_artifact_count=0`；未观察到 O1a 外层包装造成的进程计数混杂，也未暴露可复现生产资源缺陷
+- 汇总结论：`planned=3`、`attempted=3`、`valid=3`、`primary_passes=0`、`invalid_infra=0`、`ideal_trace_passes=0`、未执行编号为空，固定停止原因为 `COMPLETED_PLANNED_ATTEMPTS`，分类为 `O1B_NOT_SUPPORTED`
+- 研究解释：三个冻结样本均未完成 O1b 主要 Session 闭环，只支持“在该冻结任务、当前 kimi-k3 和当前配置下，本实验未获得支持证据”；不能泛化为 kimi-k3 或其他 coding agent 的总体能力，不能称总体成功率，也不删除、不覆盖或重新分类 O1a
+- 原始文件哈希：01 reservation `0946FB2B3FC1A87CE2C741C601F2EB2E7AA0FC46076E37E709A91503D7C88670`，01 result `BD8E2394B90929A4C1021A115F4F0DC8DDA118552E4C3E229492C1C7104F3E50`；02 reservation `76A1868225761267EBCEE6C7FD7C4D405AC201C93264B516117F45FD64D71519`，02 result `141A84E2908633C102A66E856FFD15A633E948CD5F9E0DA056CDA4250E79EC2B`；03 reservation `24B46C8D4BEE45425D4F9293986A01E39CCF6AC9DBFF386E32D92EC9CA4CA88E`，03 result `19EC2C5F44E5EE2BBB4BB4A0C2EEEF2E4AFBDBE146FB170C31CBEC5168DFDAA7`；summary `E83F5197C1994C099FEFAE42A68B5987F10FAB73478EF4392AD80E762E17D0B2`
+- 回归与扫描：真实运行后全量 `652 passed, 7 skipped in 146.98s`，提交预检 `22 passed in 0.43s`，compileall 与 `git diff --check` 通过；7 个 O1b JSON 中当前 Key 精确命中为 0，完整 prompt、fixture 正文、Bearer、Authorization、私钥头和 Windows 绝对路径命中均为 0
+- O1a 不变性：`docs/evidence/e4-session-probe.json` SHA-256 保持 `D8AE19956B3CF3A624F31D1DFC4A6AAA653110CCE7FDFF5AF9D5D2B0D09E75F0`，O1a 与 O1b 继续分列
+- 独立结果复核：`O1B REAL RESULT REVIEW APPROVED`；三份 reservation/result、文件系统先后关系、summary 六个输入哈希与离线重建、七个 O1b 原始文件哈希、安全字段和事实文档均一致，定向 summary 复验为 `31 passed, 157 deselected`。审查同时保留无独立完成时间字段、无数字签名/外部可信哈希锚、进程差分观测范围有限和三样本不可泛化等限制
+- 审核结论：通过；认可三个不可改写的 reservation/result、离线 summary、`O1B_NOT_SUPPORTED` 分类、原始哈希、回归证据与研究限制可纳入本地 evidence 提交。该通过不是对 Session 成功、kimi-k3 总体能力或成功率的肯定，也不授权第四次、协议修改、其他研究或远端 push
+- 审核时间：2026-09-02 01:13:04 +08:00
+- 审核依据：三个不可改写的 reservation、三个不可改写的单次结果、离线 summary、文件哈希、真实运行后回归、安全扫描、`O1B REAL RESULT REVIEW APPROVED`，以及项目作者明确回复 `O1-001、O1B-IMPLEMENTATION-001、O1B-RESULT-001 人工审核通过`
+
+本审核认可 O1b 真实失败结果纳入本地提交，不授权重跑、追加样本、修改协议、开展其他研究或远端 push。

@@ -1,0 +1,44 @@
+{
+  "attempted_count": 3,
+  "attempts": [
+    {
+      "attempt_index": 1,
+      "failure_code": "UNEXPECTED_COMMAND",
+      "ideal_trace_overall": null,
+      "outcome": "FAIL",
+      "status": "FAIL"
+    },
+    {
+      "attempt_index": 2,
+      "failure_code": "UNEXPECTED_COMMAND",
+      "ideal_trace_overall": null,
+      "outcome": "FAIL",
+      "status": "FAIL"
+    },
+    {
+      "attempt_index": 3,
+      "failure_code": "UNEXPECTED_COMMAND",
+      "ideal_trace_overall": null,
+      "outcome": "FAIL",
+      "status": "FAIL"
+    }
+  ],
+  "classification": "O1B_NOT_SUPPORTED",
+  "ideal_trace_passes": 0,
+  "input_sha256": {
+    "o1b-session-probe-01.json": "bd8e2394b90929a4c1021a115f4f0dc8dda118552e4c3e229492c1c7104f3e50",
+    "o1b-session-probe-01.reservation.json": "0946fb2b3fc1a87ce2c741c601f2eb2e7aa0fc46076e37e709a91503d7c88670",
+    "o1b-session-probe-02.json": "141a84e2908633c102a66e856ffd15a633e948cd5f9e0da056cda4250e79ec2b",
+    "o1b-session-probe-02.reservation.json": "76a1868225761267ebcee6c7fd7c4d405ac201c93264b516117f45fd64d71519",
+    "o1b-session-probe-03.json": "19ec2c5f44e5ee2bbb4bb4a0c2eeef2e4afbdbe146fb170c31cbec5168dfdaa7",
+    "o1b-session-probe-03.reservation.json": "24b46c8d4bee45425d4f9293986a01e39ccf6ac9dbff386e32d92ec9ca4ca88e"
+  },
+  "invalid_infra_count": 0,
+  "planned_attempts": 3,
+  "primary_passes": 0,
+  "protocol_version": "o1b-v1",
+  "schema_version": 2,
+  "stop_reason": "COMPLETED_PLANNED_ATTEMPTS",
+  "unexecuted_attempts": [],
+  "valid_attempts": 3
+}

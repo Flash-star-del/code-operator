@@ -1,0 +1,38 @@
+{
+  "schema_version": 1,
+  "probe_id": "e4-session-probe-2026-09-01",
+  "mode": "real",
+  "outcome": "FAIL",
+  "failure_code": "ACTIVE_SUBPROCESS",
+  "fixture_sha256": "a385c03528d2d55bff710dac768c2a95c90ab2fc7b2dfd861d11b5951612bdea",
+  "prompt_sha256": "12207b9f697d5e0ae106dea07d030300f0b02dd4bb70ea53b1db36d7c6a9e688",
+  "target_initial_sha256": "a890f9a8d4838a0a27d122308e63869d11ed00e756673eb8c1f02cf6b8c30bfc",
+  "target_after_turn1_sha256": null,
+  "target_after_undo_sha256": null,
+  "turn_statuses": [
+    "COMPLETED"
+  ],
+  "model_rounds": [
+    5
+  ],
+  "tool_calls": [
+    5
+  ],
+  "provider_total_tokens": [
+    6908
+  ],
+  "changed_paths_after_turn1": [],
+  "tests_after_turn1_returncode": null,
+  "tests_after_turn2_returncode": null,
+  "undo_ok": false,
+  "undo_depth_after": 0,
+  "reset_undo_depth": 0,
+  "reset_pending_events": 0,
+  "reset_history_message_count": null,
+  "reset_read_hash_count": null,
+  "close_idempotent": true,
+  "owned_client_close_calls": 1,
+  "active_subprocess_count": 1,
+  "session_artifact_count": 0,
+  "elapsed_seconds": 37.984000000025844
+}
