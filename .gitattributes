@@ -1,0 +1,7 @@
+# Keep executable sources, research protocols, and evidence byte-stable across
+# Windows and Unix checkouts. Several frozen hashes and fixtures require LF.
+.gitattributes text eol=lf
+*.py text eol=lf
+*.md text eol=lf
+*.txt text eol=lf
+*.json text eol=lf

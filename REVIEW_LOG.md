@@ -457,3 +457,23 @@
 - 审核依据：三个不可改写的 reservation、三个不可改写的单次结果、离线 summary、文件哈希、真实运行后回归、安全扫描、`O1B REAL RESULT REVIEW APPROVED`，以及项目作者明确回复 `O1-001、O1B-IMPLEMENTATION-001、O1B-RESULT-001 人工审核通过`
 
 本审核认可 O1b 真实失败结果纳入本地提交，不授权重跑、追加样本、修改协议、开展其他研究或远端 push。
+
+<a id="ci-fix-001"></a>
+
+## CI-FIX-001：Windows 全新 checkout 冻结字节修复候选
+
+- 审核状态：人工审核通过
+- 审核人：项目作者（通过当前协作任务明确确认）
+- 目标提交：`fix(ci): preserve frozen files with LF`
+- 基线提交：`8f51ee3 test(research): add real session probe evidence`
+- 触发证据：首次普通 push 成功后，GitHub Actions `offline-tests` run `33539045156` 的 Windows Python 3.11 job 在 `Run offline tests` 失败；compile 与依赖安装均成功
+- 根因复现：系统 Git 配置为 `core.autocrlf=true`，仓库没有 `.gitattributes`。从 `8f51ee3` 创建的全新 Windows clone 将已审核的 LF 文件转换为 CRLF，`tests/test_session_probe.py::test_fixture_and_prompts_match_approved_bytes` 在第 748 行稳定失败，差异为 `b'\r\n' != b'\n'`；这也改变生产 tree、evaluator 闭包和原始 evidence 的工作区 SHA-256
+- 最小修复：仅新增 `.gitattributes`，对 `.gitattributes`、`*.py`、`*.md`、`*.txt`、`*.json` 固定 `text eol=lf`；不修改任何 Python 逻辑、测试判据、研究结论或原始 JSON 内容。独立审查指出 `*.yml/*.yaml` 虽无风险但不属于冻结闭包，最终候选已移除这两条
+- GREEN 证据：把候选属性提交到临时复现仓库后再次全新 clone，抽查 O1a/O1b evidence、生产文件、requirements、Eval runner、fixture/prompt 和 O1b 设计的 SHA-256 均与原审核工作区一致；原失败测试 `1 passed`，与 CI 相同的 compile + 全量命令为 `652 passed, 7 skipped in 149.88s`。独立审查产生的 fixture 缓存被安全清理后，主工作区使用 CI 空环境变量再次全量通过 `652 passed, 7 skipped in 173.37s`
+- 安全与范围：候选只新增 `.gitattributes` 和本审核记录；不改已推送历史，不 amend/rebase/squash，不重跑 O1/O1b，不联网调用模型。修复提交和再次 push 均须重新完成审核与第 9.5 节门禁
+- 审核结论：通过；认可根因、最小 LF 属性范围、RED/GREEN 证据和原始 evidence 不变性，可形成普通追加提交。该审核不授权历史改写或再次 push，再次 push 仍须重新执行第 9.5 节并取得新授权
+- 审核时间：2026-09-02 02:07:53 +08:00
+- 审核依据：失败 CI job/step 状态、两个全新 Windows clone 的字节哈希对比、首个失败断言、候选全量回归、`CI-FIX SPEC/QUALITY APPROVED`，以及项目作者明确回复 `CI-FIX-001 人工审核通过`
+- 独立复核：`CI-FIX SPEC/QUALITY APPROVED`；确认根因、哈希稳定性、文本扩展范围和审核口径成立，技术上可提交，流程上仍等待项目作者审核与新的第 9.5 节门禁
+
+本审核认可 CI checkout 字节稳定性修复形成普通本地追加提交，不授权重新 push、历史改写或其他变更。
