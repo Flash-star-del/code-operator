@@ -36,41 +36,50 @@ EXTENSION_SYSTEMS = ("code-operator", "kimi-code")
 EXTENSION_TASKS = ("T4", "T5")
 
 
-def _extension_cells() -> tuple[RunCell, ...]:
+def _extension_cells(
+    systems: tuple[str, ...] = EXTENSION_SYSTEMS,
+    tasks: tuple[str, ...] = EXTENSION_TASKS,
+) -> tuple[RunCell, ...]:
     """Seeded per-task system order, mirroring the formal blocked schedule."""
     rng = random.Random(SEED)
     cells: list[RunCell] = []
     order_index = 0
-    for task_id in EXTENSION_TASKS:
-        systems = list(EXTENSION_SYSTEMS)
-        rng.shuffle(systems)
-        for system_id in systems:
+    for task_id in tasks:
+        shuffled = list(systems)
+        rng.shuffle(shuffled)
+        for system_id in shuffled:
             cells.append(RunCell("extension", "A", system_id, task_id, 1, order_index))
             order_index += 1
     return tuple(cells)
 
 
-def build_extension_manifest(base_manifest) -> dict[str, object]:
-    for task_id in EXTENSION_TASKS:
+def build_extension_manifest(
+    base_manifest,
+    *,
+    systems: tuple[str, ...] = EXTENSION_SYSTEMS,
+    tasks: tuple[str, ...] = EXTENSION_TASKS,
+    study_suffix: str = "-ext-t4t5",
+) -> dict[str, object]:
+    for task_id in tasks:
         validation = validate_task(task_id)
         if not validation.valid:
             raise ValueError(f"fixture invalid: {task_id}: {validation.violations}")
-    systems = [
+    configs = [
         asdict(config)
         for config in base_manifest.systems
-        if config.system_id in EXTENSION_SYSTEMS
+        if config.system_id in systems
     ]
-    if len(systems) != len(EXTENSION_SYSTEMS):
+    if len(configs) != len(systems):
         raise ValueError("base manifest is missing an extension system")
     return {
         "schema_version": 1,
-        "study_id": base_manifest.study_id + "-ext-t4t5",
+        "study_id": base_manifest.study_id + study_suffix,
         "base_manifest_sha256": canonical_sha256(base_manifest),
         "seed": SEED,
         "timeout_seconds": base_manifest.timeout_seconds,
-        "systems": systems,
-        "task_hashes": {task_id: dict(_component_hashes(task_id)) for task_id in EXTENSION_TASKS},
-        "cells": [asdict(cell) for cell in _extension_cells()],
+        "systems": configs,
+        "task_hashes": {task_id: dict(_component_hashes(task_id)) for task_id in tasks},
+        "cells": [asdict(cell) for cell in _extension_cells(systems, tasks)],
     }
 
 
@@ -84,24 +93,29 @@ def run_extension(
     manifest_out: Path,
     report_path: Path,
     workspace_parent: Path | None = None,
+    systems: tuple[str, ...] = EXTENSION_SYSTEMS,
+    tasks: tuple[str, ...] = EXTENSION_TASKS,
+    study_suffix: str = "-ext-t4t5",
 ) -> dict[str, object]:
     if Path(report_path).exists():
         raise FileExistsError("report already exists")
     base_manifest = load_manifest(base_manifest_path)
-    extension = build_extension_manifest(base_manifest)
+    extension = build_extension_manifest(
+        base_manifest, systems=systems, tasks=tasks, study_suffix=study_suffix
+    )
     manifest_bytes = _canonical_bytes(extension)
     with Path(manifest_out).open("xb") as stream:
         stream.write(manifest_bytes)
     manifest_hash = hashlib.sha256(manifest_bytes).hexdigest()
 
-    systems = {config.system_id: config for config in base_manifest.systems}
+    configs = {config.system_id: config for config in base_manifest.systems}
     source_environment = _source_environment(base_manifest)
     parent = Path(workspace_parent) if workspace_parent is not None else None
     if parent is not None:
         parent.mkdir(parents=True, exist_ok=True)
 
     rows: list[dict[str, object]] = []
-    for cell in _extension_cells():
+    for cell in _extension_cells(systems, tasks):
         destination = Path(
             tempfile.mkdtemp(
                 prefix=f"agent-comparison-extension-{cell.order_index:02d}-",
@@ -114,7 +128,7 @@ def run_extension(
             started = time.monotonic()
             try:
                 adapter = run_adapter(
-                    systems[cell.system_id],
+                    configs[cell.system_id],
                     workspace=workspace.root,
                     task=task,
                     timeout_seconds=base_manifest.timeout_seconds,
@@ -158,15 +172,21 @@ def run_extension(
 
 
 def main(argv=None) -> int:
-    parser = argparse.ArgumentParser(description="Run the T4/T5 two-system extension")
+    parser = argparse.ArgumentParser(description="Run a supplementary extension or rerun phase")
     parser.add_argument("--base-manifest", required=True, type=Path)
     parser.add_argument("--manifest-out", required=True, type=Path)
     parser.add_argument("--report", required=True, type=Path)
+    parser.add_argument("--systems", nargs="+", default=list(EXTENSION_SYSTEMS))
+    parser.add_argument("--tasks", nargs="+", default=list(EXTENSION_TASKS))
+    parser.add_argument("--study-suffix", default="-ext-t4t5")
     arguments = parser.parse_args(argv)
     run_extension(
         base_manifest_path=arguments.base_manifest,
         manifest_out=arguments.manifest_out,
         report_path=arguments.report,
+        systems=tuple(arguments.systems),
+        tasks=tuple(arguments.tasks),
+        study_suffix=arguments.study_suffix,
     )
     return 0
 
