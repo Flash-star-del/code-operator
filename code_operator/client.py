@@ -158,12 +158,13 @@ class ModelClient:
         request_payload: dict[str, object] = {
             "model": self._config.model,
             "messages": list(messages),
-            "tools": list(tools),
-            "tool_choice": "auto",
             "thinking": {"type": "disabled"},
             "max_tokens": self._config.max_output_tokens,
             "n": 1,
         }
+        if tools:
+            request_payload["tools"] = list(tools)
+            request_payload["tool_choice"] = "auto"
         response = self._post_with_retries(request_payload)
         try:
             payload: Any = response.json()

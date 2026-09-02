@@ -13,6 +13,7 @@ from code_operator.redaction import Redactor
 from code_operator.trace import TerminalTrace
 from code_operator.models import RunResult, ToolCall, ToolResult
 from code_operator.journal import UndoResult
+from code_operator.loop import CompactResult
 from code_operator.prompts import INIT_TASK_PROMPT
 
 
@@ -36,6 +37,8 @@ class FakeSession:
         self.workspace = Path("fake-workspace")
         self.model_name = "fake-model"
         self.pending_event_count = 0
+        self.agent_md_loaded = False
+        self.compact_results: list[CompactResult] = []
         self.tasks: list[str] = []
         self.reset_calls = 0
         self.close_calls = 0
@@ -54,6 +57,9 @@ class FakeSession:
         if result.ok:
             self.undo_depth = result.remaining
         return result
+
+    def compact(self) -> CompactResult:
+        return self.compact_results.pop(0)
 
     def reset(self) -> None:
         self.reset_calls += 1
@@ -592,7 +598,7 @@ def test_terminal_trace_runtime_failure_is_exit_one_and_redacts_loaded_key(
     assert r"trace failed <REDACTED>\x1b[31m" in error
 
 
-@pytest.mark.parametrize("command", ["/undo", "/new", "/status"])
+@pytest.mark.parametrize("command", ["/undo", "/new", "/status", "/compact"])
 def test_positional_session_only_commands_do_not_load_configuration(
     monkeypatch, capsys, command
 ) -> None:
@@ -649,6 +655,58 @@ def test_status_after_task_reports_session_fields_and_tokens(
     assert "部分轮次用量缺失" not in output
 
 
+def test_compact_before_initialization_is_local_and_configuration_free(
+    monkeypatch, capsys
+) -> None:
+    monkeypatch.setattr("builtins.input", scripted_input("/compact", "/exit"))
+    monkeypatch.setattr(
+        "code_operator.__main__.load_provider_config",
+        lambda **_: (_ for _ in ()).throw(AssertionError("不得加载配置")),
+    )
+
+    assert main([]) == 0
+    assert "会话尚未初始化，无需压缩" in capsys.readouterr().out
+
+
+def test_compact_success_reports_token_change_and_accumulates_usage(
+    monkeypatch, capsys
+) -> None:
+    fake = FakeSession(results=[completed()])
+    fake.compact_results = [CompactResult(True, "已压缩会话历史。", 100, 20, 50)]
+    monkeypatch.setattr(
+        "builtins.input", scripted_input("task", "/compact", "/status", "/exit")
+    )
+    monkeypatch.setattr(
+        "code_operator.__main__._create_session", lambda *_a, **_k: fake
+    )
+
+    assert main([]) == 0
+    output = capsys.readouterr().out
+    assert "[压缩] OK" in output
+    assert "估算 token：100 -> 20" in output
+    assert "累计供应商 token=52" in output
+
+
+def test_compact_failure_reports_error_without_usage_change(
+    monkeypatch, capsys
+) -> None:
+    fake = FakeSession(results=[completed()])
+    fake.compact_results = [
+        CompactResult(False, "压缩失败：模型未返回摘要；历史保持不变。")
+    ]
+    monkeypatch.setattr(
+        "builtins.input", scripted_input("task", "/compact", "/exit")
+    )
+    monkeypatch.setattr(
+        "code_operator.__main__._create_session", lambda *_a, **_k: fake
+    )
+
+    assert main([]) == 0
+    output = capsys.readouterr().out
+    assert "[压缩] ERROR" in output
+    assert "历史保持不变" in output
+
+
 def test_interactive_init_submits_preset_task(monkeypatch) -> None:
     fake = FakeSession(results=[completed()])
     monkeypatch.setattr("builtins.input", scripted_input("/init", "/exit"))
@@ -692,7 +750,7 @@ def test_unknown_local_command_is_terminal_safe_and_redacts_bearer(
     assert main([]) == 0
     output = capsys.readouterr().out
     assert "Bearer secret" not in output
-    assert "未知本地命令。支持：/undo、/new、/help、/status、/init、/exit。" in output
+    assert "未知本地命令。支持：/undo、/new、/help、/status、/init、/compact、/exit。" in output
     assert output.splitlines().count("[撤销] OK") == 0
     assert_no_untrusted_controls(output, allow_newline=True)
 
@@ -712,7 +770,7 @@ def test_unknown_local_command_uses_initialized_session_redactor(
     assert main([]) == 0
     output = capsys.readouterr().out
     assert secret not in output
-    assert "未知本地命令。支持：/undo、/new、/help、/status、/init、/exit。" in output
+    assert "未知本地命令。支持：/undo、/new、/help、/status、/init、/compact、/exit。" in output
 
 
 def test_unknown_local_command_before_initialization_never_echoes_environment_key(
@@ -731,7 +789,7 @@ def test_unknown_local_command_before_initialization_never_echoes_environment_ke
     assert main([]) == 0
     output = capsys.readouterr().out
     assert secret not in output
-    assert "未知本地命令。支持：/undo、/new、/help、/status、/init、/exit。" in output
+    assert "未知本地命令。支持：/undo、/new、/help、/status、/init、/compact、/exit。" in output
 
 
 def test_positional_natural_language_containing_undo_remains_one_shot(

@@ -140,10 +140,12 @@ def _confirm(message: str) -> bool:
     return input(message).strip().casefold() in {"y", "yes", "允许"}
 
 
-_LOCAL_COMMANDS = {"/undo", "/new", "/help", "/status", "/init", "/exit"}
+_LOCAL_COMMANDS = {
+    "/undo", "/new", "/help", "/status", "/init", "/compact", "/exit",
+}
 
 _UNKNOWN_COMMAND_HINT = (
-    "未知本地命令。支持：/undo、/new、/help、/status、/init、/exit。"
+    "未知本地命令。支持：/undo、/new、/help、/status、/init、/compact、/exit。"
 )
 
 
@@ -157,6 +159,7 @@ def _print_help() -> None:
     print("  /help    显示本帮助")
     print("  /status  显示当前会话状态")
     print("  /init    分析工作区并生成/更新 AGENT.md（会调用模型）")
+    print("  /compact 压缩会话历史为摘要（会调用模型）")
     print("  /undo    撤销最近一次直接文件修改")
     print("  /new     清空会话（不恢复文件）")
     print("  /exit    退出")
@@ -178,6 +181,7 @@ def _print_status(
     redactor = _session_redactor(session)
     print(f"  workspace={_safe_single_line(session.workspace, redactor)}")
     print(f"  model={_safe_single_line(session.model_name, redactor)}")
+    print(f"  agent_md={'loaded' if session.agent_md_loaded else 'none'}")
     print(f"  undo_depth={session.undo_depth}")
     print(f"  pending_events={session.pending_event_count}")
     if usage_incomplete:
@@ -384,6 +388,31 @@ def _run_interactive(args: argparse.Namespace) -> int:
                 print("[新会话] 已清空对话、读取状态和撤销记录；文件保持当前状态。")
                 continue
 
+            if command == "/compact":
+                if session is None:
+                    print("[压缩] 会话尚未初始化，无需压缩。")
+                    continue
+                try:
+                    compact_result = session.compact()
+                except KeyboardInterrupt:
+                    print("\n压缩已取消；历史保持不变。")
+                    continue
+                redactor = _session_redactor(session)
+                print("[压缩] OK" if compact_result.ok else "[压缩] ERROR")
+                print(
+                    f"  message={_safe_single_line(compact_result.message, redactor)}"
+                )
+                if compact_result.ok:
+                    print(
+                        f"  估算 token：{compact_result.before_tokens}"
+                        f" -> {compact_result.after_tokens}"
+                    )
+                    if compact_result.provider_total_tokens is None:
+                        usage_incomplete = True
+                    else:
+                        provider_tokens_total += compact_result.provider_total_tokens
+                continue
+
             if command == "/init":
                 task = INIT_TASK_PROMPT
                 print("[init] 已提交项目初始化任务（生成/更新 AGENT.md）。")
@@ -447,7 +476,7 @@ def main(argv: Sequence[str] | None = None) -> int:
     if command == "/help":
         _print_help()
         return 0
-    if command in {"/undo", "/new", "/status"}:
+    if command in {"/undo", "/new", "/status", "/compact"}:
         print(f"{command} 仅交互模式可用。", file=sys.stderr)
         return 2
     if command == "/init":

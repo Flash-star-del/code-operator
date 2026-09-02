@@ -2,18 +2,59 @@ from __future__ import annotations
 
 import json
 from collections.abc import Mapping, Sequence
+from dataclasses import dataclass
 from typing import Protocol
 
 from code_operator.client import ProviderError, ProviderProtocolError
 from code_operator.config import DEFAULT_CONTEXT_WINDOW, DEFAULT_MAX_OUTPUT_TOKENS
 from code_operator.context import ContextLimitError, ContextManager
 from code_operator.models import AssistantTurn, RunResult, ToolCall, ToolResult
-from code_operator.prompts import SYSTEM_PROMPT
+from code_operator.prompts import COMPACT_PROMPT, SYSTEM_PROMPT
 from code_operator.tools.registry import ToolProtocolError, ToolRegistry
 
 
 MAX_CONSECUTIVE_TOOL_FAILURES = 5
 MAX_REPEATED_CALL_RESULTS = 3
+MAX_COMPACT_SEGMENT_CHARS = 4000
+
+
+@dataclass(frozen=True)
+class CompactResult:
+    ok: bool
+    message: str
+    before_tokens: int = 0
+    after_tokens: int = 0
+    provider_total_tokens: int | None = None
+
+
+def _compact_bounded(text: str) -> str:
+    if len(text) <= MAX_COMPACT_SEGMENT_CHARS:
+        return text
+    return (
+        text[:MAX_COMPACT_SEGMENT_CHARS]
+        + f"... <truncated; original_chars={len(text)}>"
+    )
+
+
+def _serialize_for_compact(messages: Sequence[Mapping[str, object]]) -> str:
+    lines: list[str] = []
+    for message in messages:
+        role = str(message.get("role", ""))
+        raw_tool_calls = message.get("tool_calls")
+        if role == "assistant" and raw_tool_calls:
+            try:
+                calls_text = json.dumps(raw_tool_calls, ensure_ascii=False)
+            except (TypeError, ValueError):
+                calls_text = str(raw_tool_calls)
+            lines.append(f"[assistant 工具调用] {_compact_bounded(calls_text)}")
+        content = message.get("content")
+        text = "" if content is None else str(content)
+        if not text:
+            continue
+        name = message.get("name")
+        label = f"{role}:{name}" if role == "tool" and name else role
+        lines.append(f"[{label}] {_compact_bounded(text)}")
+    return "\n".join(lines)
 
 
 class ModelLike(Protocol):
@@ -91,6 +132,37 @@ class AgentLoop:
         self._messages = [
             {"role": "system", "content": self._system_prompt}
         ]
+
+    def compact(self) -> CompactResult:
+        if len(self._messages) <= 1:
+            return CompactResult(False, "没有可压缩的对话历史。")
+        history_text = _serialize_for_compact(self._messages[1:])
+        request: list[dict[str, object]] = [
+            {"role": "system", "content": COMPACT_PROMPT},
+            {"role": "user", "content": history_text},
+        ]
+        try:
+            turn = self._client.complete(request, [])
+        except (ProviderProtocolError, ProviderError) as error:
+            return CompactResult(
+                False, f"压缩失败（{type(error).__name__}）；历史保持不变。"
+            )
+        summary = (turn.content or "").strip()
+        if not summary:
+            return CompactResult(False, "压缩失败：模型未返回摘要；历史保持不变。")
+        before_tokens = self._context_manager.estimate_tokens(self._messages, [])
+        self._messages = [
+            self._messages[0],
+            {
+                "role": "user",
+                "content": f"[前情摘要（由 /compact 生成）]\n{summary}",
+            },
+        ]
+        after_tokens = self._context_manager.estimate_tokens(self._messages, [])
+        usage = None if turn.usage is None else turn.usage.total_tokens
+        return CompactResult(
+            True, "已压缩会话历史。", before_tokens, after_tokens, usage
+        )
 
     def run(self, user_task: str) -> RunResult:
         current_user = {"role": "user", "content": user_task}
