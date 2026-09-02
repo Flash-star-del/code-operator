@@ -11,7 +11,7 @@ import shutil
 import subprocess
 import sys
 import tempfile
-from collections.abc import Callable, Sequence
+from collections.abc import Callable, Mapping, Sequence
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Protocol
@@ -253,7 +253,13 @@ def _terminate_process_tree(
             process.kill()
 
 
-def run_process(argv: Sequence[str], *, cwd: Path, timeout: float) -> CommandResult:
+def run_process(
+    argv: Sequence[str],
+    *,
+    cwd: Path,
+    timeout: float,
+    environment: Mapping[str, str] | None = None,
+) -> CommandResult:
     popen_kwargs: dict[str, object] = {
         "cwd": cwd,
         "shell": False,
@@ -262,8 +268,12 @@ def run_process(argv: Sequence[str], *, cwd: Path, timeout: float) -> CommandRes
         "text": True,
         "encoding": "utf-8",
         "errors": "replace",
-        "env": sanitized_subprocess_environment(
-            api_key=os.environ.get("CODE_OPERATOR_API_KEY")
+        "env": (
+            dict(environment)
+            if environment is not None
+            else sanitized_subprocess_environment(
+                api_key=os.environ.get("CODE_OPERATOR_API_KEY")
+            )
         ),
     }
     if os.name == "nt":
