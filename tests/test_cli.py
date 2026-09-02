@@ -6,7 +6,12 @@ from pathlib import Path
 
 import pytest
 
-from code_operator.__main__ import _interactive_approval, build_parser, main
+from code_operator.__main__ import (
+    _BANNER,
+    _interactive_approval,
+    build_parser,
+    main,
+)
 from code_operator.config import ConfigError, ProviderConfig
 from code_operator.policy import PathPolicyError
 from code_operator.redaction import Redactor
@@ -114,6 +119,15 @@ def test_repl_exit_command_does_not_require_provider_configuration(
     )
 
     assert main([]) == 0
+
+
+def test_repl_prints_ascii_banner_once(monkeypatch, capsys) -> None:
+    monkeypatch.setattr("builtins.input", lambda _prompt: "/exit")
+
+    assert main([]) == 0
+    output = capsys.readouterr().out
+    assert _BANNER.isascii()
+    assert output.count(_BANNER) == 1
 
 
 def test_no_argument_cli_runs_two_tasks_in_one_session_then_exits(

@@ -144,6 +144,12 @@ _LOCAL_COMMANDS = {
     "/undo", "/new", "/help", "/status", "/init", "/compact", "/exit",
 }
 
+# 纯 ASCII，避免 Windows 控制台非 UTF-8 代码页下的编码错误。
+_BANNER = (
+    " [ ,-. ]\n"
+    " [ `-> ]  code-operator"
+)
+
 _UNKNOWN_COMMAND_HINT = (
     "未知本地命令。支持：/undo、/new、/help、/status、/init、/compact、/exit。"
 )
@@ -295,6 +301,7 @@ def _discard_warning(depth: int) -> str:
 
 
 def _run_interactive(args: argparse.Namespace) -> int:
+    print(_BANNER)
     session: AgentSession | None = None
     exit_code = 0
     primary_error = False
