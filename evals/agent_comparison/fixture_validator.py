@@ -75,6 +75,43 @@ REFERENCE_BYTES: dict[str, dict[str, bytes]] = {
             '    return f"[{normalized_level.upper()}] {message}"\n'
         ).encode(),
     },
+    "T4": {
+        "fields.py": (
+            "def split_fields(line: str) -> list[str]:\n"
+            '    """Split one CSV line on commas, trimming spaces; interior empty fields are kept."""\n'
+            "    if not isinstance(line, str):\n"
+            '        raise TypeError("line must be a string")\n'
+            "    if not line.strip():\n"
+            "        return []\n"
+            '    return [field.strip() for field in line.split(",")]\n'
+        ).encode(),
+    },
+    "T5": {
+        "lru.py": (
+            "class LRUCache:\n"
+            '    """Fixed-capacity mapping; get and put both refresh recency; least recent is evicted."""\n'
+            "\n"
+            "    def __init__(self, capacity: int) -> None:\n"
+            "        if capacity < 1:\n"
+            '            raise ValueError("capacity must be positive")\n'
+            "        self._capacity = capacity\n"
+            "        self._items: dict[str, object] = {}\n"
+            "\n"
+            "    def get(self, key: str, default: object = None) -> object:\n"
+            "        if key not in self._items:\n"
+            "            return default\n"
+            "        value = self._items.pop(key)\n"
+            "        self._items[key] = value\n"
+            "        return value\n"
+            "\n"
+            "    def put(self, key: str, value: object) -> None:\n"
+            "        if key in self._items:\n"
+            "            del self._items[key]\n"
+            "        elif len(self._items) >= self._capacity:\n"
+            "            del self._items[next(iter(self._items))]\n"
+            "        self._items[key] = value\n"
+        ).encode(),
+    },
 }
 
 
@@ -422,6 +459,18 @@ def _probes(task_id: str) -> tuple[tuple[str, str], ...]:
             ("cap", "from retry import retry_delay\nassert retry_delay(10) == 8.0"),
             ("validation", "from retry import retry_delay\n\ntry:\n    retry_delay(0)\nexcept ValueError as error:\n    assert 'attempt' in str(error)\nelse:\n    raise AssertionError"),
         )
+    if task_id == "T4":
+        return (
+            ("interior-empty", "from fields import split_fields\nassert split_fields('a,,b') == ['a', '', 'b']"),
+            ("trimming", "from fields import split_fields\nassert split_fields(' a , b ') == ['a', 'b']"),
+            ("blank-and-type", "from fields import split_fields\nassert split_fields('   ') == []\n\ntry:\n    split_fields(None)\nexcept TypeError as error:\n    assert str(error) == 'line must be a string'\nelse:\n    raise AssertionError"),
+        )
+    if task_id == "T5":
+        return (
+            ("read-refresh", "from lru import LRUCache\ncache = LRUCache(2)\ncache.put('a', 1)\ncache.put('b', 2)\nassert cache.get('a') == 1\ncache.put('c', 3)\nassert cache.get('a') == 1\nassert cache.get('b') is None"),
+            ("eviction-order", "from lru import LRUCache\ncache = LRUCache(2)\ncache.put('a', 1)\ncache.put('b', 2)\ncache.put('c', 3)\nassert cache.get('a', 'gone') == 'gone'\nassert cache.get('b') == 2\nassert cache.get('c') == 3"),
+            ("validation-and-roundtrip", "from lru import LRUCache\n\ntry:\n    LRUCache(0)\nexcept ValueError as error:\n    assert str(error) == 'capacity must be positive'\nelse:\n    raise AssertionError\ncache = LRUCache(1)\ncache.put('a', 1)\nassert cache.get('a') == 1\nassert cache.get('missing', 'fallback') == 'fallback'"),
+        )
     return (
         ("human-level", "from events import format_event\nassert format_event('disk', ' Warning ') == '[WARNING] disk'"),
         ("default", "from events import format_event\nassert format_event('ready') == '[INFO] ready'"),
@@ -462,6 +511,8 @@ def validate_task(task_id: str) -> TaskValidation:
         "T1": {"ranges.py", "tests/test_ranges.py"},
         "T2": {"retry.py", "tests/test_retry.py"},
         "T3": {"levels.py", "events.py", "tests/test_events.py"},
+        "T4": {"fields.py", "tests/test_fields.py"},
+        "T5": {"lru.py", "tests/test_lru.py"},
     }[task_id]
     violations = list(_import_violations(task_id))
     actual_project = set(_project_files(task_id))

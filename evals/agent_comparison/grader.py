@@ -14,11 +14,13 @@ from . import fixture_validator
 from .workspace import RunWorkspace, _absolute_without_following, _is_reparse_or_symlink
 
 
-TASK_IDS = frozenset({"T1", "T2", "T3"})
+TASK_IDS = frozenset({"T1", "T2", "T3", "T4", "T5"})
 _ALLOWED = {
     "T1": frozenset({"ranges.py"}),
     "T2": frozenset({"retry.py"}),
     "T3": frozenset({"levels.py", "events.py"}),
+    "T4": frozenset({"fields.py"}),
+    "T5": frozenset({"lru.py"}),
 }
 _BASELINE_PROJECT = {
     task_id: frozenset(fixture_validator._project_files(task_id)) for task_id in TASK_IDS

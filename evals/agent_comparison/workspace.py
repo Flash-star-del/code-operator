@@ -13,11 +13,13 @@ from .schema import FrozenDict
 
 
 TASK_ROOT = Path(__file__).resolve().parent / "tasks"
-TASK_IDS = frozenset({"T1", "T2", "T3"})
+TASK_IDS = frozenset({"T1", "T2", "T3", "T4", "T5"})
 _VISIBLE_FILES = {
     "T1": ("ranges.py", "tests/test_ranges.py"),
     "T2": ("retry.py", "tests/test_retry.py"),
     "T3": ("events.py", "levels.py", "tests/test_events.py"),
+    "T4": ("fields.py", "tests/test_fields.py"),
+    "T5": ("lru.py", "tests/test_lru.py"),
 }
 
 _GIT_NAME = "agent-comparison-local"
