@@ -4,7 +4,7 @@ code-operator
 
 要求 Python 3.11。安装：python -m pip install -r requirements.txt。环境变量：CODE_OPERATOR_API_KEY=<YOUR_API_KEY>、CODE_OPERATOR_BASE_URL=https://api.moonshot.cn/v1、CODE_OPERATOR_MODEL=kimi-k3。可用 --max-model-rounds N 调整单次任务的模型轮次上限。
 
-一次性模式：python -m code_operator --workspace <WORKSPACE> "<TASK>"，执行后退出。交互模式：省略 <TASK>，在同一进程连续输入任务；只支持整行 /undo、/new、/exit。/undo 以后进先出方式撤销最近一次成功且确实改变文件的直接 write_file/edit_file，校验路径类型与外部哈希，不撤销 run_command；/new 清对话、读状态和撤销记录但不恢复文件。会话与撤销仅在内存中，无跨进程 Resume 或 checkpoint。
+一次性模式：python -m code_operator --workspace <WORKSPACE> "<TASK>"，执行后退出。交互模式：省略 <TASK>，在同一进程连续输入任务；只支持整行 /help、/status、/init、/undo、/new、/exit。/undo 以后进先出方式撤销最近一次成功且确实改变文件的直接 write_file/edit_file，校验路径类型与外部哈希，不撤销 run_command；/new 清对话、读状态和撤销记录但不恢复文件；/help 列出本地命令，/status 报告会话状态与累计 token，/init 生成或更新 AGENT.md。会话与撤销仅在内存中，无跨进程 Resume 或 checkpoint。
 
 项目独立实现 ModelClient、AgentLoop、六工具、策略、上下文和会话；不用 Agent SDK。支持原生 tool calling、ID 配对、完整组裁剪、中止后结果补齐、路径/敏感文件/链接逃逸防护、命令审批、超时、进程树终止和脱敏审计。应用层防护不构成 OS 沙箱。
 
