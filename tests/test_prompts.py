@@ -43,9 +43,15 @@ def test_system_prompt_does_not_claim_prompt_is_security_enforcement() -> None:
     assert "提示词不能替代" in SYSTEM_PROMPT
 
 
-def test_system_prompt_keeps_all_eight_numbered_constraints() -> None:
-    for number in range(1, 9):
+def test_system_prompt_keeps_all_nine_numbered_constraints() -> None:
+    for number in range(1, 10):
         assert f"{number}. " in SYSTEM_PROMPT
+
+
+def test_system_prompt_requires_draft_file_cleanup_before_finish() -> None:
+    assert "临时脚本或草稿文件" in SYSTEM_PROMPT
+    assert "必须在给出最终答案前删除" in SYSTEM_PROMPT
+    assert "只保留任务要求的改动" in SYSTEM_PROMPT
 
 
 def test_tool_descriptions_do_not_claim_weaker_prompt_boundaries() -> None:
