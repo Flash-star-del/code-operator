@@ -1,4 +1,7 @@
-# code-operator
+<div align="center">
+  <img src="docs/assets/logo.svg" width="120" alt="code-operator logo"/>
+  <h1>code-operator</h1>
+</div>
 
 code-operator 是一个从零实现的命令行编程智能体（coding agent）：通过模型原生 tool calling，在受约束的本地工作区内自主读写文件、执行命令，并根据真实执行结果继续推理，直至完成编程任务。
 
@@ -117,7 +120,7 @@ CLI 以普通纯文本输出模型轮次、工具名、脱敏后的有界参数�
 - **离线测试**：Windows/Python 3.11 上 870+ 项测试覆盖循环、会话、撤销、上下文、中止配对、CLI 与安全行为；脚本化假模型逐轮核对回放字段与工具 ID 配对；测试进程拒绝未模拟的真实 socket 连接。
 - **真实任务验收**（2026-08-28，kimi-k3）：隔离 buggy Python 项目，初始独立测试 2 失败 1 通过，agent 只修改生产文件，最终独立复跑 3 通过；6 轮、6 次工具调用，供应商报告 10,890 tokens；审计中未出现当前 API Key 或 Bearer。证据：[`docs/evidence/m4-real-task.json`](docs/evidence/m4-real-task.json)。
 - **黄金 Eval**（2026-08-29，kimi-k3）：冻结订单价格流水线任务经 `python -m evals.run_golden --report <NEW_REPORT.json>` 在三个全新临时工作区运行，三次全部成功；测试文件哈希未变，变更路径仅为生产文件。证据：[`docs/evidence/e2-golden-eval.json`](docs/evidence/e2-golden-eval.json)（另保留修复评测器环境净化问题前的报告以供审查）。
-- **双系统横评**：与 Kimi Code 的对比记录见 [`docs/agent-comparison-results.md`](docs/agent-comparison-results.md)（五个合成任务、单次运行、独立隐藏测试评分，仅代表该样本）。
+- **双系统横评**：与 Kimi Code 的对比记录见 [`docs/agent-comparison-results.md`](docs/agent-comparison-results.md)（五个合成任务、单次运行、独立隐藏测试评分，仅代表该样本）。横评定位出的主要缺陷（草稿脚本残留）已当日修复并对失败单元复跑验证，形成"发现 → 修复 → 验证"的闭环，全过程证据冻结入库。
 
 ### 真实任务执行轨迹
 
