@@ -477,3 +477,31 @@
 - 独立复核：`CI-FIX SPEC/QUALITY APPROVED`；确认根因、哈希稳定性、文本扩展范围和审核口径成立，技术上可提交，流程上仍等待项目作者审核与新的第 9.5 节门禁
 
 本审核认可 CI checkout 字节稳定性修复形成普通本地追加提交，不授权重新 push、历史改写或其他变更。
+
+<a id="research-ablation-001"></a>
+
+## RESEARCH-ABLATION-001：48 行确定性可靠性消融候选
+
+- 审核状态：人工审核通过
+- 审核人：项目作者（通过当前协作任务明确确认）
+- 目标提交：`test(research): add deterministic reliability ablations`
+- 基线提交：`eb32af2 fix(ci): preserve frozen files with LF`
+- 审核范围：`evals/reliability/` 的 schema、上下文/中止/错误三类双臂实验，`evals/run_reliability_study.py`，`tests/test_reliability_study.py`，排他生成的 `docs/evidence/reliability-study.json`，两份研究计划的事实收敛和本记录；不修改 `code_operator/` 生产代码或依赖，不包含外部 Agent 安装、登录、Pilot、18 次正式横评、Track B、Ubuntu、提交或 push
+- TDD RED：Task1 首次为 `ModuleNotFoundError: evals.reliability`；Task2 首次缺 context 模块，双层判定测试为 3 项失败，非法上下文分类测试为 1 项失败；Task3 首次缺 abort 模块，后续指标来源、精确 payload 和 baseline 计数测试分别先失败；Task4 首次缺 error 模块，归因谓词修订测试先因 `_attributable_failure` 缺失而失败；Task5 报告模块缺失导致 4 项失败，完整 manifest/路径测试新增后 8 项失败，actual retry manifest 测试 2 项失败，内嵌 manifest/context summary 测试 1 项失败，写入故障清理测试 1 项失败
+- Task2 批准勘误：冻结矩阵未改；C1 预算 229、最低完整链 249、短缺 20，C2 预算 357、最低完整链 377、短缺 20，均为 `passed=false / CONTEXT_LIMIT / safe_stop=true / protocol_checked=false`。C3–C6 才进入实际协议检查，4 行均保留最新完整组且无配对违规；报告汇总固定为生产 6 行、实际检查 4 行、安全停止 2 行、已生成上下文配对违规 0 行、H1 全场景成功 false
+- RQ2 结果：9 个冻结中止位置中，生产臂 9/9 从下一次公开模型请求捕获到每个原 ID 恰好一次且有序；中止前 payload、中止点 `USER_ABORTED` 和后续 `NOT_EXECUTED_AFTER_ABORT` 均精确匹配并可继续下一任务。立即停止弱基线 9/9 遗漏当前或后续结果。冻结矩阵只覆盖 handler 返回 `USER_ABORTED`，未覆盖更广的 `KeyboardInterrupt` 和结果序列化异常，不据此泛化
+- RQ3 结果：九个场景中两臂记录相同的 same/corrected/unrelated 分类；模糊载荷 9/9 不可由稳定错误码归因，结构化载荷 9/9 可归因。该结果只比较可观察错误表示，不调用模型，不证明结构化反馈导致真实模型恢复
+- 正式报告：共 48 行，context/abort/error 分别为 12/18/18；按 `(mechanism, scenario_id, arm)` 排序；嵌入脱敏的完整场景 manifest，actual retry 工具与参数摘要也受哈希承诺；manifest SHA-256 为 `96240d8b0f8be0ff6e06accb79154e0841f20a0df307d6ddac5fba137e93a4e7`，报告文件 SHA-256 为 `EF1C9EC453933854F6F4EDB4269E4C49B8642E9E0D19D82B95A10DA4E81F63D3`；无时间戳且内存生成字节稳定，目标存在时拒绝覆盖，写入中断时清理由本次调用创建的残缺文件
+- GREEN 与回归：reliability 全集 `52 passed in 0.43s`；O1b 探针专项在清理本次 compileall 生成的两个 fixture `__pycache__` 后为 `181 passed, 7 skipped in 102.23s`；最终新鲜全量为 `704 passed, 7 skipped in 149.23s`；提交预检 `22 passed in 0.38s`；`python -m compileall -q code_operator evals tests`、`mypy evals/run_reliability_study.py evals/reliability --follow-imports=skip --ignore-missing-imports`（6 个新源文件零错误）和 `git diff --check` 均通过
+- 失败运行处置：第一次全量得到 `656 passed, 6 skipped, 49 failed`，共同原因是此前 compileall 在冻结 O1b source fixture 内生成两个被忽略的 `__pycache__`，fixture 防污染校验按设计拒绝并导致级联；只删除这两个已验证位于 `evals/session_probe/project/` 内的可重建缓存后，受影响专项和最终全量均通过。未删除、覆盖或改写正式 evidence
+- 安全与隐私：正式报告中的 API Key/Bearer/private-key 形态命中为 0；新增候选通用扫描只命中 `tests/test_reliability_study.py` 中 3 个明确合成扫描哨兵。报告递归拒绝禁止字段、Windows 盘符/UNC/POSIX 绝对路径和嵌套凭据形态；不保存 prompt、模型、供应商、用户名、环境值、请求头、reasoning、完整命令输出或临时绝对路径；fixture 缓存复核为 0
+- 独立复核：Task1–Task5 均经过实现、规格和质量审查；期间按审查意见修复固定窗口验证、Task2 空验证美化、异常误分类、Task3 指标公式化和宽松 payload、Task4 归因/重试混淆、manifest 输入承诺、路径/凭据扫描及部分写入残留。最终 Task5 规格结论 `APPROVED`、质量结论 `QUALITY APPROVED`
+- 开源与实现边界：全部弱基线只存在 `evals/reliability/`，不接入生产 CLI；未引入 Agent SDK/框架、第三方 Agent 源码或新增依赖；当前候选不修改 `code_operator/`，生产核心继续独立实现
+- 已知限制：内部消融不是外部产品横评或成功率；H1 原“全部上下文场景成功”被实际结果否定；中止矩阵的异常类型覆盖有限；结构化错误实验不含真实模型；Windows 符号链接相关 7 项仍因当前权限跳过。Claude Code/Kimi Code Pilot、18 个 Track A 单元、研究综合、条件性 Ubuntu、录像、ZIP 和最终上传均未完成
+- 审核结论：通过；认可 48 行离线确定性消融、正式 evidence、TDD/回归/扫描证据及其限制可以形成本地语义化提交。该通过不授权 push、外部安装/登录、数据出境、Pilot、正式横评或生产修复
+- 审核时间：2026-09-02 12:10:32 +08:00
+- 人工审核依据：项目作者在收到完整 `RESEARCH-ABLATION-001` 审核包后明确回复 `RESEARCH-ABLATION-001 人工审核通过`
+- 候选形成时间：2026-09-02 12:01:17 +08:00
+- 审核依据：完整候选 diff、上述 RED/GREEN 命令、正式报告/manifest 哈希、全量/预检/编译/类型/差异检查、安全扫描及独立规格/质量复核
+
+本审核只覆盖离线确定性消融及其证据，不扩大外部研究、生产修复、远端推送或最终提交权限。

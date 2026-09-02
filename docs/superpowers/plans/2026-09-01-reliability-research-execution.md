@@ -20,6 +20,8 @@
 - API Key 只从环境变量或官方安全登录读取；不得进入命令行参数、manifest、JSON、stdout/stderr 持久化、Git 或视频。
 - 已推送历史不得 amend、rebase、squash 或强推。
 
+**2026-09-02 resumed execution:** 项目作者在 O1b 与 CI 修复完成后明确要求“完成科研横评”，因此重新开放内部确定性消融、三系统 Pilot、18 个正式 Track A 单元、结果综合和条件性 Ubuntu 决策。原 2026-09-01 18:00 冻结不再阻止这些已批准研究任务，但不改变三系统、三任务、两次重复、固定种子、失败保留、统一评分和完整平衡区组规则。该恢复指令不授权安装/登录外部工具、数据出境、可选 Codex/DeepSeek、真实 Track B、生产修复、提交或 push；这些边界继续分别取得明确授权。题目 PDF 的 2026-09-02 24:00 官方截止仍为绝对上限，必做 Track A 与可复现报告优先于 Ubuntu和所有可选系统。
+
 ## Plan decomposition and fixed order
 
 1. [O1 E4 真实 Session 探针](2026-09-01-e4-session-probe-implementation.md)

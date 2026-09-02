@@ -1,0 +1,1108 @@
+{
+  "context_production_summary": {
+    "h1_all_scenarios_success": false,
+    "production_rows": 6,
+    "protocol_checked_rows": 4,
+    "protocol_violation_rows": 0,
+    "safe_stop_rows": 2
+  },
+  "results": [
+    {
+      "arm": "immediate_abort",
+      "mechanism": "abort_ordering",
+      "metrics": {
+        "completed_before_abort": 0,
+        "declared_calls": 2,
+        "next_round_accepted": false,
+        "ordered_result_count": 0,
+        "result_count": 0,
+        "synthetic_after_abort": 0
+      },
+      "passed": false,
+      "scenario_id": "A2_0",
+      "violations": []
+    },
+    {
+      "arm": "production_ordered",
+      "mechanism": "abort_ordering",
+      "metrics": {
+        "completed_before_abort": 0,
+        "declared_calls": 2,
+        "next_round_accepted": true,
+        "ordered_result_count": 2,
+        "result_count": 2,
+        "synthetic_after_abort": 1
+      },
+      "passed": true,
+      "scenario_id": "A2_0",
+      "violations": []
+    },
+    {
+      "arm": "immediate_abort",
+      "mechanism": "abort_ordering",
+      "metrics": {
+        "completed_before_abort": 1,
+        "declared_calls": 2,
+        "next_round_accepted": false,
+        "ordered_result_count": 1,
+        "result_count": 1,
+        "synthetic_after_abort": 0
+      },
+      "passed": false,
+      "scenario_id": "A2_1",
+      "violations": []
+    },
+    {
+      "arm": "production_ordered",
+      "mechanism": "abort_ordering",
+      "metrics": {
+        "completed_before_abort": 1,
+        "declared_calls": 2,
+        "next_round_accepted": true,
+        "ordered_result_count": 2,
+        "result_count": 2,
+        "synthetic_after_abort": 0
+      },
+      "passed": true,
+      "scenario_id": "A2_1",
+      "violations": []
+    },
+    {
+      "arm": "immediate_abort",
+      "mechanism": "abort_ordering",
+      "metrics": {
+        "completed_before_abort": 0,
+        "declared_calls": 3,
+        "next_round_accepted": false,
+        "ordered_result_count": 0,
+        "result_count": 0,
+        "synthetic_after_abort": 0
+      },
+      "passed": false,
+      "scenario_id": "A3_0",
+      "violations": []
+    },
+    {
+      "arm": "production_ordered",
+      "mechanism": "abort_ordering",
+      "metrics": {
+        "completed_before_abort": 0,
+        "declared_calls": 3,
+        "next_round_accepted": true,
+        "ordered_result_count": 3,
+        "result_count": 3,
+        "synthetic_after_abort": 2
+      },
+      "passed": true,
+      "scenario_id": "A3_0",
+      "violations": []
+    },
+    {
+      "arm": "immediate_abort",
+      "mechanism": "abort_ordering",
+      "metrics": {
+        "completed_before_abort": 1,
+        "declared_calls": 3,
+        "next_round_accepted": false,
+        "ordered_result_count": 1,
+        "result_count": 1,
+        "synthetic_after_abort": 0
+      },
+      "passed": false,
+      "scenario_id": "A3_1",
+      "violations": []
+    },
+    {
+      "arm": "production_ordered",
+      "mechanism": "abort_ordering",
+      "metrics": {
+        "completed_before_abort": 1,
+        "declared_calls": 3,
+        "next_round_accepted": true,
+        "ordered_result_count": 3,
+        "result_count": 3,
+        "synthetic_after_abort": 1
+      },
+      "passed": true,
+      "scenario_id": "A3_1",
+      "violations": []
+    },
+    {
+      "arm": "immediate_abort",
+      "mechanism": "abort_ordering",
+      "metrics": {
+        "completed_before_abort": 2,
+        "declared_calls": 3,
+        "next_round_accepted": false,
+        "ordered_result_count": 2,
+        "result_count": 2,
+        "synthetic_after_abort": 0
+      },
+      "passed": false,
+      "scenario_id": "A3_2",
+      "violations": []
+    },
+    {
+      "arm": "production_ordered",
+      "mechanism": "abort_ordering",
+      "metrics": {
+        "completed_before_abort": 2,
+        "declared_calls": 3,
+        "next_round_accepted": true,
+        "ordered_result_count": 3,
+        "result_count": 3,
+        "synthetic_after_abort": 0
+      },
+      "passed": true,
+      "scenario_id": "A3_2",
+      "violations": []
+    },
+    {
+      "arm": "immediate_abort",
+      "mechanism": "abort_ordering",
+      "metrics": {
+        "completed_before_abort": 0,
+        "declared_calls": 4,
+        "next_round_accepted": false,
+        "ordered_result_count": 0,
+        "result_count": 0,
+        "synthetic_after_abort": 0
+      },
+      "passed": false,
+      "scenario_id": "A4_0",
+      "violations": []
+    },
+    {
+      "arm": "production_ordered",
+      "mechanism": "abort_ordering",
+      "metrics": {
+        "completed_before_abort": 0,
+        "declared_calls": 4,
+        "next_round_accepted": true,
+        "ordered_result_count": 4,
+        "result_count": 4,
+        "synthetic_after_abort": 3
+      },
+      "passed": true,
+      "scenario_id": "A4_0",
+      "violations": []
+    },
+    {
+      "arm": "immediate_abort",
+      "mechanism": "abort_ordering",
+      "metrics": {
+        "completed_before_abort": 1,
+        "declared_calls": 4,
+        "next_round_accepted": false,
+        "ordered_result_count": 1,
+        "result_count": 1,
+        "synthetic_after_abort": 0
+      },
+      "passed": false,
+      "scenario_id": "A4_1",
+      "violations": []
+    },
+    {
+      "arm": "production_ordered",
+      "mechanism": "abort_ordering",
+      "metrics": {
+        "completed_before_abort": 1,
+        "declared_calls": 4,
+        "next_round_accepted": true,
+        "ordered_result_count": 4,
+        "result_count": 4,
+        "synthetic_after_abort": 2
+      },
+      "passed": true,
+      "scenario_id": "A4_1",
+      "violations": []
+    },
+    {
+      "arm": "immediate_abort",
+      "mechanism": "abort_ordering",
+      "metrics": {
+        "completed_before_abort": 2,
+        "declared_calls": 4,
+        "next_round_accepted": false,
+        "ordered_result_count": 2,
+        "result_count": 2,
+        "synthetic_after_abort": 0
+      },
+      "passed": false,
+      "scenario_id": "A4_2",
+      "violations": []
+    },
+    {
+      "arm": "production_ordered",
+      "mechanism": "abort_ordering",
+      "metrics": {
+        "completed_before_abort": 2,
+        "declared_calls": 4,
+        "next_round_accepted": true,
+        "ordered_result_count": 4,
+        "result_count": 4,
+        "synthetic_after_abort": 1
+      },
+      "passed": true,
+      "scenario_id": "A4_2",
+      "violations": []
+    },
+    {
+      "arm": "immediate_abort",
+      "mechanism": "abort_ordering",
+      "metrics": {
+        "completed_before_abort": 3,
+        "declared_calls": 4,
+        "next_round_accepted": false,
+        "ordered_result_count": 3,
+        "result_count": 3,
+        "synthetic_after_abort": 0
+      },
+      "passed": false,
+      "scenario_id": "A4_3",
+      "violations": []
+    },
+    {
+      "arm": "production_ordered",
+      "mechanism": "abort_ordering",
+      "metrics": {
+        "completed_before_abort": 3,
+        "declared_calls": 4,
+        "next_round_accepted": true,
+        "ordered_result_count": 4,
+        "result_count": 4,
+        "synthetic_after_abort": 0
+      },
+      "passed": true,
+      "scenario_id": "A4_3",
+      "violations": []
+    },
+    {
+      "arm": "message_level",
+      "mechanism": "context",
+      "metrics": {
+        "estimated_tokens": 199,
+        "kept_messages": 3,
+        "outcome": "OK",
+        "protocol_checked": true,
+        "safe_stop": false,
+        "trimmed_messages": 1,
+        "trimmed_rounds": 0,
+        "trimmed_turns": 0
+      },
+      "passed": false,
+      "scenario_id": "C1_ONE_CALL_BOUNDARY",
+      "violations": [
+        {
+          "call_id": "C1_ONE_CALL_BOUNDARY-g0-c0",
+          "kind": "ORPHAN_RESULT",
+          "message_index": 2
+        }
+      ]
+    },
+    {
+      "arm": "production_full_group",
+      "mechanism": "context",
+      "metrics": {
+        "estimated_tokens": 249,
+        "input_budget": 229,
+        "kept_messages": null,
+        "outcome": "CONTEXT_LIMIT",
+        "protocol_checked": false,
+        "required_minimum_tokens": 249,
+        "safe_stop": true,
+        "shortfall_tokens": 20,
+        "trimmed_messages": null,
+        "trimmed_rounds": null,
+        "trimmed_turns": null
+      },
+      "passed": false,
+      "scenario_id": "C1_ONE_CALL_BOUNDARY",
+      "violations": []
+    },
+    {
+      "arm": "message_level",
+      "mechanism": "context",
+      "metrics": {
+        "estimated_tokens": 293,
+        "kept_messages": 4,
+        "outcome": "OK",
+        "protocol_checked": true,
+        "safe_stop": false,
+        "trimmed_messages": 1,
+        "trimmed_rounds": 0,
+        "trimmed_turns": 0
+      },
+      "passed": false,
+      "scenario_id": "C2_TWO_CALL_BOUNDARY",
+      "violations": [
+        {
+          "call_id": "C2_TWO_CALL_BOUNDARY-g0-c0",
+          "kind": "ORPHAN_RESULT",
+          "message_index": 2
+        },
+        {
+          "call_id": "C2_TWO_CALL_BOUNDARY-g0-c1",
+          "kind": "ORPHAN_RESULT",
+          "message_index": 3
+        }
+      ]
+    },
+    {
+      "arm": "production_full_group",
+      "mechanism": "context",
+      "metrics": {
+        "estimated_tokens": 377,
+        "input_budget": 357,
+        "kept_messages": null,
+        "outcome": "CONTEXT_LIMIT",
+        "protocol_checked": false,
+        "required_minimum_tokens": 377,
+        "safe_stop": true,
+        "shortfall_tokens": 20,
+        "trimmed_messages": null,
+        "trimmed_rounds": null,
+        "trimmed_turns": null
+      },
+      "passed": false,
+      "scenario_id": "C2_TWO_CALL_BOUNDARY",
+      "violations": []
+    },
+    {
+      "arm": "message_level",
+      "mechanism": "context",
+      "metrics": {
+        "estimated_tokens": 263,
+        "kept_messages": 4,
+        "outcome": "OK",
+        "protocol_checked": true,
+        "safe_stop": false,
+        "trimmed_messages": 3,
+        "trimmed_rounds": 0,
+        "trimmed_turns": 0
+      },
+      "passed": true,
+      "scenario_id": "C3_OLD_TURN_DROP",
+      "violations": []
+    },
+    {
+      "arm": "production_full_group",
+      "mechanism": "context",
+      "metrics": {
+        "estimated_tokens": 263,
+        "input_budget": 263,
+        "kept_messages": 4,
+        "latest_group_preserved": true,
+        "outcome": "OK",
+        "protocol_checked": true,
+        "required_minimum_tokens": 263,
+        "safe_stop": false,
+        "shortfall_tokens": 0,
+        "trimmed_messages": 3,
+        "trimmed_rounds": 0,
+        "trimmed_turns": 1
+      },
+      "passed": true,
+      "scenario_id": "C3_OLD_TURN_DROP",
+      "violations": []
+    },
+    {
+      "arm": "message_level",
+      "mechanism": "context",
+      "metrics": {
+        "estimated_tokens": 1166,
+        "kept_messages": 12,
+        "outcome": "OK",
+        "protocol_checked": true,
+        "safe_stop": false,
+        "trimmed_messages": 4,
+        "trimmed_rounds": 0,
+        "trimmed_turns": 0
+      },
+      "passed": true,
+      "scenario_id": "C4_MULTI_TURN_MULTI_CALL",
+      "violations": []
+    },
+    {
+      "arm": "production_full_group",
+      "mechanism": "context",
+      "metrics": {
+        "estimated_tokens": 1166,
+        "input_budget": 1166,
+        "kept_messages": 12,
+        "latest_group_preserved": true,
+        "outcome": "OK",
+        "protocol_checked": true,
+        "required_minimum_tokens": 1166,
+        "safe_stop": false,
+        "shortfall_tokens": 0,
+        "trimmed_messages": 4,
+        "trimmed_rounds": 0,
+        "trimmed_turns": 1
+      },
+      "passed": true,
+      "scenario_id": "C4_MULTI_TURN_MULTI_CALL",
+      "violations": []
+    },
+    {
+      "arm": "message_level",
+      "mechanism": "context",
+      "metrics": {
+        "estimated_tokens": 194,
+        "kept_messages": 4,
+        "outcome": "OK",
+        "protocol_checked": true,
+        "safe_stop": false,
+        "trimmed_messages": 2,
+        "trimmed_rounds": 0,
+        "trimmed_turns": 0
+      },
+      "passed": true,
+      "scenario_id": "C5_NO_TOOL_OLD_TURN",
+      "violations": []
+    },
+    {
+      "arm": "production_full_group",
+      "mechanism": "context",
+      "metrics": {
+        "estimated_tokens": 194,
+        "input_budget": 194,
+        "kept_messages": 4,
+        "latest_group_preserved": true,
+        "outcome": "OK",
+        "protocol_checked": true,
+        "required_minimum_tokens": 194,
+        "safe_stop": false,
+        "shortfall_tokens": 0,
+        "trimmed_messages": 2,
+        "trimmed_rounds": 0,
+        "trimmed_turns": 1
+      },
+      "passed": true,
+      "scenario_id": "C5_NO_TOOL_OLD_TURN",
+      "violations": []
+    },
+    {
+      "arm": "message_level",
+      "mechanism": "context",
+      "metrics": {
+        "estimated_tokens": 1001,
+        "kept_messages": 6,
+        "outcome": "OK",
+        "protocol_checked": true,
+        "safe_stop": false,
+        "trimmed_messages": 3,
+        "trimmed_rounds": 0,
+        "trimmed_turns": 0
+      },
+      "passed": false,
+      "scenario_id": "C6_UTF8_BOUNDARY",
+      "violations": [
+        {
+          "call_id": "C6_UTF8_BOUNDARY-g0-c1",
+          "kind": "ORPHAN_RESULT",
+          "message_index": 1
+        }
+      ]
+    },
+    {
+      "arm": "production_full_group",
+      "mechanism": "context",
+      "metrics": {
+        "estimated_tokens": 728,
+        "input_budget": 1001,
+        "kept_messages": 5,
+        "latest_group_preserved": true,
+        "outcome": "OK",
+        "protocol_checked": true,
+        "required_minimum_tokens": 728,
+        "safe_stop": false,
+        "shortfall_tokens": 0,
+        "trimmed_messages": 4,
+        "trimmed_rounds": 0,
+        "trimmed_turns": 1
+      },
+      "passed": true,
+      "scenario_id": "C6_UTF8_BOUNDARY",
+      "violations": []
+    },
+    {
+      "arm": "structured_error",
+      "mechanism": "error_feedback",
+      "metrics": {
+        "attributable_failure": true,
+        "first_arguments_sha256": "5e1f1b62650a4dbb3bf60b958c2368b0acde79a62c2d96058605d99cdab00bbd",
+        "first_arguments_utf8_bytes": 75,
+        "message_length": 19,
+        "payload_fields": 3,
+        "retry_classification": "CORRECTED_RETRY"
+      },
+      "passed": true,
+      "scenario_id": "E3_COMMAND_DENIED_corrected",
+      "violations": []
+    },
+    {
+      "arm": "vague_error",
+      "mechanism": "error_feedback",
+      "metrics": {
+        "attributable_failure": false,
+        "first_arguments_sha256": "5e1f1b62650a4dbb3bf60b958c2368b0acde79a62c2d96058605d99cdab00bbd",
+        "first_arguments_utf8_bytes": 75,
+        "payload_fields": 2,
+        "retry_classification": "CORRECTED_RETRY"
+      },
+      "passed": false,
+      "scenario_id": "E3_COMMAND_DENIED_corrected",
+      "violations": []
+    },
+    {
+      "arm": "structured_error",
+      "mechanism": "error_feedback",
+      "metrics": {
+        "attributable_failure": true,
+        "first_arguments_sha256": "5e1f1b62650a4dbb3bf60b958c2368b0acde79a62c2d96058605d99cdab00bbd",
+        "first_arguments_utf8_bytes": 75,
+        "message_length": 19,
+        "payload_fields": 3,
+        "retry_classification": "SAME_FAILURE_RETRY"
+      },
+      "passed": true,
+      "scenario_id": "E3_COMMAND_DENIED_same",
+      "violations": []
+    },
+    {
+      "arm": "vague_error",
+      "mechanism": "error_feedback",
+      "metrics": {
+        "attributable_failure": false,
+        "first_arguments_sha256": "5e1f1b62650a4dbb3bf60b958c2368b0acde79a62c2d96058605d99cdab00bbd",
+        "first_arguments_utf8_bytes": 75,
+        "payload_fields": 2,
+        "retry_classification": "SAME_FAILURE_RETRY"
+      },
+      "passed": false,
+      "scenario_id": "E3_COMMAND_DENIED_same",
+      "violations": []
+    },
+    {
+      "arm": "structured_error",
+      "mechanism": "error_feedback",
+      "metrics": {
+        "attributable_failure": true,
+        "first_arguments_sha256": "5e1f1b62650a4dbb3bf60b958c2368b0acde79a62c2d96058605d99cdab00bbd",
+        "first_arguments_utf8_bytes": 75,
+        "message_length": 19,
+        "payload_fields": 3,
+        "retry_classification": "UNRELATED_ACTION"
+      },
+      "passed": true,
+      "scenario_id": "E3_COMMAND_DENIED_unrelated",
+      "violations": []
+    },
+    {
+      "arm": "vague_error",
+      "mechanism": "error_feedback",
+      "metrics": {
+        "attributable_failure": false,
+        "first_arguments_sha256": "5e1f1b62650a4dbb3bf60b958c2368b0acde79a62c2d96058605d99cdab00bbd",
+        "first_arguments_utf8_bytes": 75,
+        "payload_fields": 2,
+        "retry_classification": "UNRELATED_ACTION"
+      },
+      "passed": false,
+      "scenario_id": "E3_COMMAND_DENIED_unrelated",
+      "violations": []
+    },
+    {
+      "arm": "structured_error",
+      "mechanism": "error_feedback",
+      "metrics": {
+        "attributable_failure": true,
+        "first_arguments_sha256": "97a1e71f458340b3cc93a29fae3b6a0146406dc90cfbc13810332326de3054d2",
+        "first_arguments_utf8_bytes": 83,
+        "message_length": 22,
+        "payload_fields": 3,
+        "retry_classification": "CORRECTED_RETRY"
+      },
+      "passed": true,
+      "scenario_id": "E3_INVALID_ARGUMENTS_corrected",
+      "violations": []
+    },
+    {
+      "arm": "vague_error",
+      "mechanism": "error_feedback",
+      "metrics": {
+        "attributable_failure": false,
+        "first_arguments_sha256": "97a1e71f458340b3cc93a29fae3b6a0146406dc90cfbc13810332326de3054d2",
+        "first_arguments_utf8_bytes": 83,
+        "payload_fields": 2,
+        "retry_classification": "CORRECTED_RETRY"
+      },
+      "passed": false,
+      "scenario_id": "E3_INVALID_ARGUMENTS_corrected",
+      "violations": []
+    },
+    {
+      "arm": "structured_error",
+      "mechanism": "error_feedback",
+      "metrics": {
+        "attributable_failure": true,
+        "first_arguments_sha256": "97a1e71f458340b3cc93a29fae3b6a0146406dc90cfbc13810332326de3054d2",
+        "first_arguments_utf8_bytes": 83,
+        "message_length": 22,
+        "payload_fields": 3,
+        "retry_classification": "SAME_FAILURE_RETRY"
+      },
+      "passed": true,
+      "scenario_id": "E3_INVALID_ARGUMENTS_same",
+      "violations": []
+    },
+    {
+      "arm": "vague_error",
+      "mechanism": "error_feedback",
+      "metrics": {
+        "attributable_failure": false,
+        "first_arguments_sha256": "97a1e71f458340b3cc93a29fae3b6a0146406dc90cfbc13810332326de3054d2",
+        "first_arguments_utf8_bytes": 83,
+        "payload_fields": 2,
+        "retry_classification": "SAME_FAILURE_RETRY"
+      },
+      "passed": false,
+      "scenario_id": "E3_INVALID_ARGUMENTS_same",
+      "violations": []
+    },
+    {
+      "arm": "structured_error",
+      "mechanism": "error_feedback",
+      "metrics": {
+        "attributable_failure": true,
+        "first_arguments_sha256": "97a1e71f458340b3cc93a29fae3b6a0146406dc90cfbc13810332326de3054d2",
+        "first_arguments_utf8_bytes": 83,
+        "message_length": 22,
+        "payload_fields": 3,
+        "retry_classification": "UNRELATED_ACTION"
+      },
+      "passed": true,
+      "scenario_id": "E3_INVALID_ARGUMENTS_unrelated",
+      "violations": []
+    },
+    {
+      "arm": "vague_error",
+      "mechanism": "error_feedback",
+      "metrics": {
+        "attributable_failure": false,
+        "first_arguments_sha256": "97a1e71f458340b3cc93a29fae3b6a0146406dc90cfbc13810332326de3054d2",
+        "first_arguments_utf8_bytes": 83,
+        "payload_fields": 2,
+        "retry_classification": "UNRELATED_ACTION"
+      },
+      "passed": false,
+      "scenario_id": "E3_INVALID_ARGUMENTS_unrelated",
+      "violations": []
+    },
+    {
+      "arm": "structured_error",
+      "mechanism": "error_feedback",
+      "metrics": {
+        "attributable_failure": true,
+        "first_arguments_sha256": "b094adbfc0dd11ca663afdf656c0206dcca4131ea5cac762abb96596d9829312",
+        "first_arguments_utf8_bytes": 58,
+        "message_length": 27,
+        "payload_fields": 3,
+        "retry_classification": "CORRECTED_RETRY"
+      },
+      "passed": true,
+      "scenario_id": "E3_PATH_OUTSIDE_WORKSPACE_corrected",
+      "violations": []
+    },
+    {
+      "arm": "vague_error",
+      "mechanism": "error_feedback",
+      "metrics": {
+        "attributable_failure": false,
+        "first_arguments_sha256": "b094adbfc0dd11ca663afdf656c0206dcca4131ea5cac762abb96596d9829312",
+        "first_arguments_utf8_bytes": 58,
+        "payload_fields": 2,
+        "retry_classification": "CORRECTED_RETRY"
+      },
+      "passed": false,
+      "scenario_id": "E3_PATH_OUTSIDE_WORKSPACE_corrected",
+      "violations": []
+    },
+    {
+      "arm": "structured_error",
+      "mechanism": "error_feedback",
+      "metrics": {
+        "attributable_failure": true,
+        "first_arguments_sha256": "b094adbfc0dd11ca663afdf656c0206dcca4131ea5cac762abb96596d9829312",
+        "first_arguments_utf8_bytes": 58,
+        "message_length": 27,
+        "payload_fields": 3,
+        "retry_classification": "SAME_FAILURE_RETRY"
+      },
+      "passed": true,
+      "scenario_id": "E3_PATH_OUTSIDE_WORKSPACE_same",
+      "violations": []
+    },
+    {
+      "arm": "vague_error",
+      "mechanism": "error_feedback",
+      "metrics": {
+        "attributable_failure": false,
+        "first_arguments_sha256": "b094adbfc0dd11ca663afdf656c0206dcca4131ea5cac762abb96596d9829312",
+        "first_arguments_utf8_bytes": 58,
+        "payload_fields": 2,
+        "retry_classification": "SAME_FAILURE_RETRY"
+      },
+      "passed": false,
+      "scenario_id": "E3_PATH_OUTSIDE_WORKSPACE_same",
+      "violations": []
+    },
+    {
+      "arm": "structured_error",
+      "mechanism": "error_feedback",
+      "metrics": {
+        "attributable_failure": true,
+        "first_arguments_sha256": "b094adbfc0dd11ca663afdf656c0206dcca4131ea5cac762abb96596d9829312",
+        "first_arguments_utf8_bytes": 58,
+        "message_length": 27,
+        "payload_fields": 3,
+        "retry_classification": "UNRELATED_ACTION"
+      },
+      "passed": true,
+      "scenario_id": "E3_PATH_OUTSIDE_WORKSPACE_unrelated",
+      "violations": []
+    },
+    {
+      "arm": "vague_error",
+      "mechanism": "error_feedback",
+      "metrics": {
+        "attributable_failure": false,
+        "first_arguments_sha256": "b094adbfc0dd11ca663afdf656c0206dcca4131ea5cac762abb96596d9829312",
+        "first_arguments_utf8_bytes": 58,
+        "payload_fields": 2,
+        "retry_classification": "UNRELATED_ACTION"
+      },
+      "passed": false,
+      "scenario_id": "E3_PATH_OUTSIDE_WORKSPACE_unrelated",
+      "violations": []
+    }
+  ],
+  "scenario_manifest": {
+    "mechanisms": [
+      {
+        "arms": [
+          "message_level",
+          "production_full_group"
+        ],
+        "context_window": 293,
+        "input_budget": 229,
+        "max_output_tokens": 64,
+        "mechanism": "context",
+        "message_count": 4,
+        "messages_sha256": "4525e5a1b52ff655c761ab9b1a2fc760d2e56f4fa66c3edac00f3c0556f6c219",
+        "scenario_id": "C1_ONE_CALL_BOUNDARY",
+        "tools_sha256": "6cc72d22fda02d487102d8cebcf675ad1078a813d39b7fcd6e931e97ea94f881"
+      },
+      {
+        "arms": [
+          "message_level",
+          "production_full_group"
+        ],
+        "context_window": 421,
+        "input_budget": 357,
+        "max_output_tokens": 64,
+        "mechanism": "context",
+        "message_count": 5,
+        "messages_sha256": "785d32852c45fc914ea17043757ad3277c0aa251a25c8e4ca5a36f69bf270c71",
+        "scenario_id": "C2_TWO_CALL_BOUNDARY",
+        "tools_sha256": "0688c23730681e45e9eb53fa72903a0f913df88bdc9eb3ed9469cd20923e2004"
+      },
+      {
+        "arms": [
+          "message_level",
+          "production_full_group"
+        ],
+        "context_window": 327,
+        "input_budget": 263,
+        "max_output_tokens": 64,
+        "mechanism": "context",
+        "message_count": 7,
+        "messages_sha256": "af23492f20aa0900e6668efdd083b21a3b295fa27b45375aa2df771d8344d2f0",
+        "scenario_id": "C3_OLD_TURN_DROP",
+        "tools_sha256": "e130cef453ccd8e2bb24d8105147e63645f551e249ad5776ed134bb8c6dbbaf7"
+      },
+      {
+        "arms": [
+          "message_level",
+          "production_full_group"
+        ],
+        "context_window": 1230,
+        "input_budget": 1166,
+        "max_output_tokens": 64,
+        "mechanism": "context",
+        "message_count": 16,
+        "messages_sha256": "f9481e5d22b1184c02a6a0396d27efeebc56d3b1ffeaf371a508e7496180576f",
+        "scenario_id": "C4_MULTI_TURN_MULTI_CALL",
+        "tools_sha256": "97ed7882f8ccbdf483f2ba81bef4a252dfc267a0dac26eef731a9b485678e395"
+      },
+      {
+        "arms": [
+          "message_level",
+          "production_full_group"
+        ],
+        "context_window": 258,
+        "input_budget": 194,
+        "max_output_tokens": 64,
+        "mechanism": "context",
+        "message_count": 6,
+        "messages_sha256": "cc7ec25d77d8d306f58a71637a2d7b0e4d495079a98350abddab08a9957133f5",
+        "scenario_id": "C5_NO_TOOL_OLD_TURN",
+        "tools_sha256": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945"
+      },
+      {
+        "arms": [
+          "message_level",
+          "production_full_group"
+        ],
+        "context_window": 1065,
+        "input_budget": 1001,
+        "max_output_tokens": 64,
+        "mechanism": "context",
+        "message_count": 9,
+        "messages_sha256": "9f80813b705da4f89d53f5b6e6943d3c205361f02e77f7358619b18cc80b34eb",
+        "scenario_id": "C6_UTF8_BOUNDARY",
+        "tools_sha256": "7201222439de2ced70d2048f079ee167f52a816cda87a9c1c9b36564ca194cc2"
+      },
+      {
+        "abort_index": 0,
+        "arms": [
+          "immediate_abort",
+          "production_ordered"
+        ],
+        "mechanism": "abort_ordering",
+        "scenario_id": "A2_0",
+        "tool_count": 2
+      },
+      {
+        "abort_index": 1,
+        "arms": [
+          "immediate_abort",
+          "production_ordered"
+        ],
+        "mechanism": "abort_ordering",
+        "scenario_id": "A2_1",
+        "tool_count": 2
+      },
+      {
+        "abort_index": 0,
+        "arms": [
+          "immediate_abort",
+          "production_ordered"
+        ],
+        "mechanism": "abort_ordering",
+        "scenario_id": "A3_0",
+        "tool_count": 3
+      },
+      {
+        "abort_index": 1,
+        "arms": [
+          "immediate_abort",
+          "production_ordered"
+        ],
+        "mechanism": "abort_ordering",
+        "scenario_id": "A3_1",
+        "tool_count": 3
+      },
+      {
+        "abort_index": 2,
+        "arms": [
+          "immediate_abort",
+          "production_ordered"
+        ],
+        "mechanism": "abort_ordering",
+        "scenario_id": "A3_2",
+        "tool_count": 3
+      },
+      {
+        "abort_index": 0,
+        "arms": [
+          "immediate_abort",
+          "production_ordered"
+        ],
+        "mechanism": "abort_ordering",
+        "scenario_id": "A4_0",
+        "tool_count": 4
+      },
+      {
+        "abort_index": 1,
+        "arms": [
+          "immediate_abort",
+          "production_ordered"
+        ],
+        "mechanism": "abort_ordering",
+        "scenario_id": "A4_1",
+        "tool_count": 4
+      },
+      {
+        "abort_index": 2,
+        "arms": [
+          "immediate_abort",
+          "production_ordered"
+        ],
+        "mechanism": "abort_ordering",
+        "scenario_id": "A4_2",
+        "tool_count": 4
+      },
+      {
+        "abort_index": 3,
+        "arms": [
+          "immediate_abort",
+          "production_ordered"
+        ],
+        "mechanism": "abort_ordering",
+        "scenario_id": "A4_3",
+        "tool_count": 4
+      },
+      {
+        "arms": [
+          "vague_error",
+          "structured_error"
+        ],
+        "error_code": "PATH_OUTSIDE_WORKSPACE",
+        "failed_tool": "read_file",
+        "first_arguments_sha256": "b094adbfc0dd11ca663afdf656c0206dcca4131ea5cac762abb96596d9829312",
+        "mechanism": "error_feedback",
+        "retry_arguments_sha256": "b094adbfc0dd11ca663afdf656c0206dcca4131ea5cac762abb96596d9829312",
+        "retry_arguments_utf8_bytes": 58,
+        "retry_shape": "same",
+        "retry_tool": "read_file",
+        "scenario_id": "E3_PATH_OUTSIDE_WORKSPACE_same"
+      },
+      {
+        "arms": [
+          "vague_error",
+          "structured_error"
+        ],
+        "error_code": "PATH_OUTSIDE_WORKSPACE",
+        "failed_tool": "read_file",
+        "first_arguments_sha256": "b094adbfc0dd11ca663afdf656c0206dcca4131ea5cac762abb96596d9829312",
+        "mechanism": "error_feedback",
+        "retry_arguments_sha256": "e5d7924d97fb14e3058b8527924fe9ca1560465e5774d925ee0e206de7ff2071",
+        "retry_arguments_utf8_bytes": 38,
+        "retry_shape": "corrected",
+        "retry_tool": "read_file",
+        "scenario_id": "E3_PATH_OUTSIDE_WORKSPACE_corrected"
+      },
+      {
+        "arms": [
+          "vague_error",
+          "structured_error"
+        ],
+        "error_code": "PATH_OUTSIDE_WORKSPACE",
+        "failed_tool": "read_file",
+        "first_arguments_sha256": "b094adbfc0dd11ca663afdf656c0206dcca4131ea5cac762abb96596d9829312",
+        "mechanism": "error_feedback",
+        "retry_arguments_sha256": "4ae486c3a48f8dc732af672b138b438a1d96960304cc334d46bbc2687d169cbb",
+        "retry_arguments_utf8_bytes": 12,
+        "retry_shape": "unrelated",
+        "retry_tool": "list_dir",
+        "scenario_id": "E3_PATH_OUTSIDE_WORKSPACE_unrelated"
+      },
+      {
+        "arms": [
+          "vague_error",
+          "structured_error"
+        ],
+        "error_code": "COMMAND_DENIED",
+        "failed_tool": "run_command",
+        "first_arguments_sha256": "5e1f1b62650a4dbb3bf60b958c2368b0acde79a62c2d96058605d99cdab00bbd",
+        "mechanism": "error_feedback",
+        "retry_arguments_sha256": "5e1f1b62650a4dbb3bf60b958c2368b0acde79a62c2d96058605d99cdab00bbd",
+        "retry_arguments_utf8_bytes": 75,
+        "retry_shape": "same",
+        "retry_tool": "run_command",
+        "scenario_id": "E3_COMMAND_DENIED_same"
+      },
+      {
+        "arms": [
+          "vague_error",
+          "structured_error"
+        ],
+        "error_code": "COMMAND_DENIED",
+        "failed_tool": "run_command",
+        "first_arguments_sha256": "5e1f1b62650a4dbb3bf60b958c2368b0acde79a62c2d96058605d99cdab00bbd",
+        "mechanism": "error_feedback",
+        "retry_arguments_sha256": "4f4087309aa246b1ecabe909ad9529500595a0f12c110861cc41114eb951bc59",
+        "retry_arguments_utf8_bytes": 60,
+        "retry_shape": "corrected",
+        "retry_tool": "run_command",
+        "scenario_id": "E3_COMMAND_DENIED_corrected"
+      },
+      {
+        "arms": [
+          "vague_error",
+          "structured_error"
+        ],
+        "error_code": "COMMAND_DENIED",
+        "failed_tool": "run_command",
+        "first_arguments_sha256": "5e1f1b62650a4dbb3bf60b958c2368b0acde79a62c2d96058605d99cdab00bbd",
+        "mechanism": "error_feedback",
+        "retry_arguments_sha256": "4ae486c3a48f8dc732af672b138b438a1d96960304cc334d46bbc2687d169cbb",
+        "retry_arguments_utf8_bytes": 12,
+        "retry_shape": "unrelated",
+        "retry_tool": "list_dir",
+        "scenario_id": "E3_COMMAND_DENIED_unrelated"
+      },
+      {
+        "arms": [
+          "vague_error",
+          "structured_error"
+        ],
+        "error_code": "INVALID_ARGUMENTS",
+        "failed_tool": "read_file",
+        "first_arguments_sha256": "97a1e71f458340b3cc93a29fae3b6a0146406dc90cfbc13810332326de3054d2",
+        "mechanism": "error_feedback",
+        "retry_arguments_sha256": "97a1e71f458340b3cc93a29fae3b6a0146406dc90cfbc13810332326de3054d2",
+        "retry_arguments_utf8_bytes": 83,
+        "retry_shape": "same",
+        "retry_tool": "read_file",
+        "scenario_id": "E3_INVALID_ARGUMENTS_same"
+      },
+      {
+        "arms": [
+          "vague_error",
+          "structured_error"
+        ],
+        "error_code": "INVALID_ARGUMENTS",
+        "failed_tool": "read_file",
+        "first_arguments_sha256": "97a1e71f458340b3cc93a29fae3b6a0146406dc90cfbc13810332326de3054d2",
+        "mechanism": "error_feedback",
+        "retry_arguments_sha256": "5571a3bd981177fcb32fb0c83c1ec48266cc728804d32a3092bca77b1bed1a43",
+        "retry_arguments_utf8_bytes": 68,
+        "retry_shape": "corrected",
+        "retry_tool": "read_file",
+        "scenario_id": "E3_INVALID_ARGUMENTS_corrected"
+      },
+      {
+        "arms": [
+          "vague_error",
+          "structured_error"
+        ],
+        "error_code": "INVALID_ARGUMENTS",
+        "failed_tool": "read_file",
+        "first_arguments_sha256": "97a1e71f458340b3cc93a29fae3b6a0146406dc90cfbc13810332326de3054d2",
+        "mechanism": "error_feedback",
+        "retry_arguments_sha256": "4ae486c3a48f8dc732af672b138b438a1d96960304cc334d46bbc2687d169cbb",
+        "retry_arguments_utf8_bytes": 12,
+        "retry_shape": "unrelated",
+        "retry_tool": "list_dir",
+        "scenario_id": "E3_INVALID_ARGUMENTS_unrelated"
+      }
+    ],
+    "study_id": "reliability-2026-09-01-preregistered"
+  },
+  "scenario_manifest_sha256": "96240d8b0f8be0ff6e06accb79154e0841f20a0df307d6ddac5fba137e93a4e7",
+  "schema_version": 1,
+  "study_id": "reliability-2026-09-01-preregistered"
+}

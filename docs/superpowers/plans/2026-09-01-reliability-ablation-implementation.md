@@ -64,7 +64,7 @@ The deterministic report must contain no raw model prompt, temporary absolute pa
 
 **Files:** Create `evals/reliability/schema.py`; create `tests/test_reliability_study.py`.
 
-- [ ] **Step 1: Write RED tests for pairing violations**
+- [x] **Step 1: Write RED tests for pairing violations**
 
 Use these exact cases:
 
@@ -94,7 +94,7 @@ def test_validate_tool_pairing_classifies_invalid_groups(messages, kind) -> None
     assert validate_tool_pairing(messages)[0].kind == kind
 ```
 
-- [ ] **Step 2: Confirm RED**
+- [x] **Step 2: Confirm RED**
 
 ```powershell
 python -m pytest tests/test_reliability_study.py -q
@@ -102,7 +102,7 @@ python -m pytest tests/test_reliability_study.py -q
 
 Expected: `evals.reliability.schema` is missing.
 
-- [ ] **Step 3: Implement the validator and canonical manifest hashing**
+- [x] **Step 3: Implement the validator and canonical manifest hashing**
 
 Add the exact interface `validate_tool_pairing(messages: Sequence[Mapping[str, object]]) -> tuple[PairingViolation, ...]` and this canonical hash helper:
 
@@ -116,7 +116,7 @@ def canonical_sha256(value: object) -> str:
 
 The validator walks assistant tool IDs in declaration order, consumes exactly that many immediately following tool messages, and emits stable kinds for missing, orphan, duplicate, and out-of-order IDs. It must not import private methods from `ContextManager`.
 
-- [ ] **Step 4: Confirm GREEN**
+- [x] **Step 4: Confirm GREEN**
 
 ```powershell
 python -m pytest tests/test_reliability_study.py -q
@@ -126,7 +126,7 @@ python -m pytest tests/test_reliability_study.py -q
 
 **Files:** Create `evals/reliability/context_study.py`; modify `tests/test_reliability_study.py`.
 
-- [ ] **Step 1: Write RED tests for the frozen matrix**
+- [x] **Step 1: Write RED tests for the frozen matrix**
 
 Define the exact scenario type and matrix:
 
@@ -176,7 +176,7 @@ for scenario in scenarios:
 assert any(run_context_scenario(item)[0].violations for item in scenarios)
 ```
 
-- [ ] **Step 2: Confirm RED**
+- [x] **Step 2: Confirm RED**
 
 ```powershell
 python -m pytest tests/test_reliability_study.py -k context -q
@@ -184,13 +184,15 @@ python -m pytest tests/test_reliability_study.py -k context -q
 
 Expected: context study module/functions are missing.
 
-- [ ] **Step 3: Implement the two arms**
+- [x] **Step 3: Implement the two arms**
 
 `message_level_trim()` is intentionally weak Eval-only code: copy messages, preserve system and newest user, then drop individual oldest non-system messages until `ContextManager.estimate_tokens()` fits. It must not call production `prepare()`.
 
 The production arm constructs `ContextManager(context_window=scenario.context_window, max_output_tokens=scenario.max_output_tokens)`, calls `prepare()`, and validates returned messages. Both arms record `estimated_tokens`, `kept_messages`, `trimmed_messages`, `trimmed_turns`, and `trimmed_rounds`; only the production arm may use production trimming metadata.
 
-- [ ] **Step 4: Confirm GREEN against production context tests**
+**2026-09-02 approved Task 2 correction:** 项目作者在看到 C1/C2 的实际预算证据后明确回复 `批准 Task2 双层判定勘误`。冻结矩阵和预算校准不得修改。C1/C2 的最低完整当前执行链大于输入预算，生产 `ContextManager` 按既有安全契约返回 `ContextLimitError`；这不是配对违规，但也不得冒充成功裁剪。生产臂必须以 `passed=false`、`outcome=CONTEXT_LIMIT`、`safe_stop=true`、`protocol_checked=false`、空 `violations` 和非空预算指标记录，并包含 `input_budget`、`required_minimum_tokens`、`shortfall_tokens`。只有 `outcome=OK` 且 `protocol_checked=true`、配对无违规时才允许 `passed=true`；所有成功行必须保留最新完整 user/tool group。最终汇总分别报告 4 个实际协议检查行、2 个预期安全停止行和已生成上下文中的 0 个生产配对违规；原 H1 的“全部场景成功”不成立。不得仅凭 `violations == ()` 推导通过，也不得用全零 metrics 隐藏安全停止。
+
+- [x] **Step 4: Confirm GREEN against production context tests**
 
 ```powershell
 python -m pytest tests/test_reliability_study.py -k context -q
@@ -201,7 +203,7 @@ python -m pytest tests/test_context.py -q
 
 **Files:** Create `evals/reliability/abort_study.py`; modify `tests/test_reliability_study.py`.
 
-- [ ] **Step 1: Write RED tests for every abort position**
+- [x] **Step 1: Write RED tests for every abort position**
 
 Freeze:
 
@@ -223,19 +225,19 @@ def frozen_abort_scenarios() -> tuple[AbortScenario, ...]:
 
 For each scenario, a fake assistant emits ordered IDs from `call-0` through `call-(N-1)`; the handler at `abort_index` returns `ToolResult(ok=False, error_code="USER_ABORTED", message="工具执行被用户中止", details={})`, exactly matching the existing returned-abort contract. Assert the production `AgentLoop` produces exactly N ordered tool results and can accept a next fake model turn, while `immediate_abort_baseline()` omits at least the current/future results.
 
-- [ ] **Step 2: Confirm RED**
+- [x] **Step 2: Confirm RED**
 
 ```powershell
 python -m pytest tests/test_reliability_study.py -k abort -q
 ```
 
-- [ ] **Step 3: Implement the Eval-only baseline and production adapter**
+- [x] **Step 3: Implement the Eval-only baseline and production adapter**
 
 Expose the exact interfaces `immediate_abort_baseline(scenario: AbortScenario) -> ArmResult`, `production_abort_result(scenario: AbortScenario) -> ArmResult`, and `run_abort_scenario(scenario: AbortScenario) -> tuple[ArmResult, ArmResult]`.
 
 The production adapter uses a fresh `AgentLoop`, `FakeModelClient`, and `ToolRegistry` per case. Derive result IDs from captured second-request messages, not a private `_messages` field. Metrics: `declared_calls`, `result_count`, `ordered_result_count`, `next_round_accepted`, `completed_before_abort`, `synthetic_after_abort`.
 
-- [ ] **Step 4: Confirm GREEN**
+- [x] **Step 4: Confirm GREEN**
 
 ```powershell
 python -m pytest tests/test_reliability_study.py -k abort -q
@@ -246,7 +248,7 @@ python -m pytest tests/test_loop.py tests/test_registry.py -q
 
 **Files:** Create `evals/reliability/error_study.py`; modify `tests/test_reliability_study.py`.
 
-- [ ] **Step 1: Write RED deterministic classification tests**
+- [x] **Step 1: Write RED deterministic classification tests**
 
 Freeze nine inputs: three error classes (`PATH_OUTSIDE_WORKSPACE`, `COMMAND_DENIED`, `INVALID_ARGUMENTS`) crossed with three retry shapes (`same`, `corrected`, `unrelated`). Use one canonical injected failure per class.
 
@@ -264,19 +266,21 @@ The classifier has the exact interface `classify_retry(*, first_tool: str, first
 
 Assert structured payloads always expose `ok=false`, stable `error_code`, and bounded `message`, while vague payload is exactly `{"ok": false, "message": "工具执行失败"}`. The deterministic primary metric is `attributable_failure` from observable fields, not a claim about model cognition.
 
-- [ ] **Step 2: Confirm RED**
+**Task 4 execution clarification:** `attributable_failure` means only that the arm's observable payload contains `ok=false` and the exact injected stable `error_code`; it is independent of the separately reported `retry_classification`. Both arms record the same retry classification for a scenario. `ArmResult.passed` equals this observable attribution predicate, so the vague arm is false and the structured arm is true for every frozen retry shape. Argument hashes and lengths are derived from the same canonical JSON UTF-8 bytes. These deterministic rows do not claim that structured feedback caused a model to recover.
+
+- [x] **Step 2: Confirm RED**
 
 ```powershell
 python -m pytest tests/test_reliability_study.py -k error -q
 ```
 
-- [ ] **Step 3: Implement deterministic arms**
+- [x] **Step 3: Implement deterministic arms**
 
 Expose the exact interfaces `vague_error_payload() -> dict[str, object]`, `structured_error_payload(result: ToolResult) -> dict[str, object]`, and `run_error_scenario(scenario: ErrorScenario) -> tuple[ArmResult, ArmResult]`.
 
 Use synthetic arguments containing credential-like strings in one test and assert persisted metrics contain only hashes/lengths, never the values. Do not call any model in the mandatory study. A later optional real-model pairing requires a separate manifest, authorization and result namespace; it must not alter these deterministic results.
 
-- [ ] **Step 4: Confirm GREEN**
+- [x] **Step 4: Confirm GREEN**
 
 ```powershell
 python -m pytest tests/test_reliability_study.py -k error -q
@@ -287,7 +291,7 @@ python -m pytest tests/test_registry.py tests/test_policy.py tests/test_audit.py
 
 **Files:** Create `evals/run_reliability_study.py`; modify `tests/test_reliability_study.py`.
 
-- [ ] **Step 1: Write RED report tests**
+- [x] **Step 1: Write RED report tests**
 
 Assert the CLI:
 
@@ -300,13 +304,13 @@ is byte-identical across two in-memory generations except no timestamps exist
 contains no provider/model/credential fields
 ```
 
-- [ ] **Step 2: Confirm RED**
+- [x] **Step 2: Confirm RED**
 
 ```powershell
 python -m pytest tests/test_reliability_study.py -k report -q
 ```
 
-- [ ] **Step 3: Implement and generate once**
+- [x] **Step 3: Implement and generate once**
 
 CLI:
 
@@ -325,7 +329,7 @@ total: 48 rows
 
 Use an exclusive create. Because this experiment has no secret input, the writer may pass an empty synthetic redaction value only if the existing helper supports it; otherwise add a local `open("x", encoding="utf-8")` exclusive writer with the same current-key/Bearer/private-key checks. Do not weaken the shared writer.
 
-- [ ] **Step 4: Verify**
+- [x] **Step 4: Verify**
 
 ```powershell
 python -m pytest tests/test_reliability_study.py -q
@@ -338,11 +342,13 @@ git diff --check
 
 Manually verify the report states raw counts only, includes every failed baseline case, and makes no statistical-significance or real-model-causality claim.
 
+Execution evidence (2026-09-02): the exclusive report contains 48 rows; manifest SHA-256 is `96240d8b0f8be0ff6e06accb79154e0841f20a0df307d6ddac5fba137e93a4e7`; report file SHA-256 is `ef1c9ec453933854f6f4edb4269e4c49b8642e9e0d19d82b95a10da4e81f63d3`. The embedded context summary is `production_rows=6`, `protocol_checked_rows=4`, `safe_stop_rows=2`, `protocol_violation_rows=0`, and `h1_all_scenarios_success=false`. Reliability tests passed `52`; full offline tests passed `704` with `7` skipped; submission preflight passed `22`. Compileall, research-scope mypy over all six new source files, report integrity, credential-shape scan, cache cleanup, and `git diff --check` passed. The first full-suite attempt was invalidated by compileall-created fixture caches; after deleting only those two ignored generated directories, the affected probe suite passed `181` with `7` skipped and the fresh full suite passed.
+
 ## Task 6: Human review and local checkpoint
 
-- [ ] Update the root v4.5 research checkboxes and add `REVIEW_LOG.md#research-ablation-001` with RED/GREEN commands, exact 48-row manifest hash, full-suite result, scans and limitations.
-- [ ] Present the full implementation/evidence diff for `RESEARCH-ABLATION-001` human review.
-- [ ] After approval, create local commit `test(research): add deterministic reliability ablations`.
+- [x] Update the root v4.5 research checkboxes and add `REVIEW_LOG.md#research-ablation-001` with RED/GREEN commands, exact 48-row manifest hash, full-suite result, scans and limitations.
+- [x] Present the full implementation/evidence diff for `RESEARCH-ABLATION-001` human review.
+- [x] After approval, create local commit `test(research): add deterministic reliability ablations`.
 - [ ] Do not push until the full v4.5 section 9.5 package is shown and a new explicit push authorization is received.
 
 ## Interpretation boundary
