@@ -199,6 +199,14 @@ class AgentSession:
         return self._file_tools
 
     @property
+    def workspace(self) -> Path:
+        return self._workspace_policy.workspace
+
+    @property
+    def model_name(self) -> str:
+        return self._config.model
+
+    @property
     def undo_depth(self) -> int:
         return self._journal.depth
 

@@ -15,6 +15,7 @@ from code_operator.policy import (
     ApprovalCallback,
     PathPolicyError,
 )
+from code_operator.prompts import INIT_TASK_PROMPT
 from code_operator.redaction import Redactor
 from code_operator.session import AgentSession, build_tool_registry
 from code_operator.tools.registry import ToolRegistry
@@ -139,9 +140,50 @@ def _confirm(message: str) -> bool:
     return input(message).strip().casefold() in {"y", "yes", "允许"}
 
 
+_LOCAL_COMMANDS = {"/undo", "/new", "/help", "/status", "/init", "/exit"}
+
+_UNKNOWN_COMMAND_HINT = (
+    "未知本地命令。支持：/undo、/new、/help、/status、/init、/exit。"
+)
+
+
 def _local_command(text: str) -> str | None:
     folded = text.strip().casefold()
-    return folded if folded in {"/undo", "/new", "/exit"} else None
+    return folded if folded in _LOCAL_COMMANDS else None
+
+
+def _print_help() -> None:
+    print("本地命令：")
+    print("  /help    显示本帮助")
+    print("  /status  显示当前会话状态")
+    print("  /init    分析工作区并生成/更新 AGENT.md（会调用模型）")
+    print("  /undo    撤销最近一次直接文件修改")
+    print("  /new     清空会话（不恢复文件）")
+    print("  /exit    退出")
+
+
+def _print_status(
+    session: AgentSession | None,
+    *,
+    workspace: str,
+    provider_tokens: int,
+    usage_incomplete: bool,
+) -> None:
+    print("[状态]")
+    if session is None:
+        safe_workspace = _safe_single_line(Path(workspace).resolve(), Redactor([]))
+        print(f"  workspace={safe_workspace}")
+        print("  会话尚未初始化（首个任务开始时才会加载配置）。")
+        return
+    redactor = _session_redactor(session)
+    print(f"  workspace={_safe_single_line(session.workspace, redactor)}")
+    print(f"  model={_safe_single_line(session.model_name, redactor)}")
+    print(f"  undo_depth={session.undo_depth}")
+    print(f"  pending_events={session.pending_event_count}")
+    if usage_incomplete:
+        print(f"  累计供应商 token={provider_tokens}（部分轮次用量缺失）")
+    else:
+        print(f"  累计供应商 token={provider_tokens}")
 
 
 def _safe_single_line(value: object, redactor: Redactor) -> str:
@@ -252,6 +294,8 @@ def _run_interactive(args: argparse.Namespace) -> int:
     session: AgentSession | None = None
     exit_code = 0
     primary_error = False
+    provider_tokens_total = 0
+    usage_incomplete = False
     try:
         while True:
             try:
@@ -271,7 +315,20 @@ def _run_interactive(args: argparse.Namespace) -> int:
 
             command = _local_command(task)
             if command is None and stripped.startswith("/"):
-                print("未知本地命令。支持：/undo、/new、/exit。")
+                print(_UNKNOWN_COMMAND_HINT)
+                continue
+
+            if command == "/help":
+                _print_help()
+                continue
+
+            if command == "/status":
+                _print_status(
+                    session,
+                    workspace=args.workspace,
+                    provider_tokens=provider_tokens_total,
+                    usage_incomplete=usage_incomplete,
+                )
                 continue
 
             if command == "/exit":
@@ -322,8 +379,14 @@ def _run_interactive(args: argparse.Namespace) -> int:
                         print("\n已取消新建会话。")
                         continue
                 session.reset()
+                provider_tokens_total = 0
+                usage_incomplete = False
                 print("[新会话] 已清空对话、读取状态和撤销记录；文件保持当前状态。")
                 continue
+
+            if command == "/init":
+                task = INIT_TASK_PROMPT
+                print("[init] 已提交项目初始化任务（生成/更新 AGENT.md）。")
 
             if session is None:
                 try:
@@ -346,8 +409,13 @@ def _run_interactive(args: argparse.Namespace) -> int:
                     provider_total_tokens=None,
                     estimated_context_tokens=0,
                 )
+                usage_incomplete = True
                 _print_run_result(result, redactor)
                 continue
+            if result.provider_total_tokens is None:
+                usage_incomplete = True
+            else:
+                provider_tokens_total += result.provider_total_tokens
             _print_run_result(result, redactor)
     except Exception as error:
         primary_error = True
@@ -376,9 +444,14 @@ def main(argv: Sequence[str] | None = None) -> int:
     command = _local_command(task)
     if command == "/exit":
         return 0
-    if command in {"/undo", "/new"}:
+    if command == "/help":
+        _print_help()
+        return 0
+    if command in {"/undo", "/new", "/status"}:
         print(f"{command} 仅交互模式可用。", file=sys.stderr)
         return 2
+    if command == "/init":
+        task = INIT_TASK_PROMPT
     return _run_one_shot(args, task)
 
 
