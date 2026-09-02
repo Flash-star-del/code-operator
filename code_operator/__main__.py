@@ -7,6 +7,7 @@ import sys
 from collections.abc import Mapping, Sequence
 from pathlib import Path
 
+from code_operator.colors import colorize
 from code_operator.config import ConfigError, ProviderConfig, load_provider_config
 from code_operator.journal import UndoResult
 from code_operator.loop import ModelLike, TraceLike
@@ -77,12 +78,12 @@ def _interactive_approval(
         terminal_safe_text(active_redactor.redact(item)) for item in argv
     ]
     redacted_cwd = terminal_safe_text(active_redactor.redact(cwd))
-    print("\n命令需要人工批准：")
+    print(colorize("\n命令需要人工批准：", "yellow"))
     print(f"  参数：{json.dumps(redacted_argv, ensure_ascii=False)}")
     print(f"  工作目录：{redacted_cwd}")
     answer = input("仅允许本次执行？[y/N] ").strip().casefold()
     allowed = answer in {"y", "yes", "允许"}
-    print("[审批] ALLOW" if allowed else "[审批] DENY")
+    print(colorize("[审批] ALLOW", "green") if allowed else colorize("[审批] DENY", "red"))
     return allowed
 
 
@@ -116,13 +117,16 @@ def _print_run_result(result: RunResult, redactor: Redactor) -> int:
         safe_final_text = terminal_safe_text(
             redactor.redact(result.final_text), multiline=True
         )
-        print("[回答]")
+        print(colorize("[回答]", "bold"))
         for line in safe_final_text.split(chr(10)):
             print(f"  {line}")
     safe_status = terminal_safe_text(redactor.redact(result.status))
     print(
-        f"状态={safe_status} 模型轮次={result.model_rounds} "
-        f"工具调用={result.tool_calls}"
+        colorize(
+            f"状态={safe_status} 模型轮次={result.model_rounds} "
+            f"工具调用={result.tool_calls}",
+            "green" if result.status == "COMPLETED" else "red",
+        )
     )
     if result.provider_total_tokens is None:
         print("供应商用量不完整")
@@ -205,7 +209,7 @@ def _safe_single_line(value: object, redactor: Redactor) -> str:
 
 
 def _print_undo_result(result: UndoResult, redactor: Redactor) -> None:
-    print("[撤销] OK" if result.ok else "[撤销] ERROR")
+    print(colorize("[撤销] OK", "green") if result.ok else colorize("[撤销] ERROR", "red"))
     tool = "-" if result.source_tool is None else _safe_single_line(
         result.source_tool, redactor
     )
@@ -405,7 +409,11 @@ def _run_interactive(args: argparse.Namespace) -> int:
                     print("\n压缩已取消；历史保持不变。")
                     continue
                 redactor = _session_redactor(session)
-                print("[压缩] OK" if compact_result.ok else "[压缩] ERROR")
+                print(
+                    colorize("[压缩] OK", "green")
+                    if compact_result.ok
+                    else colorize("[压缩] ERROR", "red")
+                )
                 print(
                     f"  message={_safe_single_line(compact_result.message, redactor)}"
                 )

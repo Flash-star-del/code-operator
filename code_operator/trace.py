@@ -5,6 +5,7 @@ import re
 import unicodedata
 from collections.abc import Callable, Mapping
 
+from code_operator.colors import colorize
 from code_operator.models import RunResult, ToolCall, ToolResult
 from code_operator.redaction import Redactor
 
@@ -72,12 +73,18 @@ class TerminalTrace:
 
     def record_model_round(self, round_number: int, tool_call_count: int, usage_available: bool) -> None:
         usage = "available" if usage_available else "unavailable"
-        self._emit(f"[模型 {round_number}] tool_calls={tool_call_count} usage={usage}")
+        self._emit(
+            colorize(
+                f"[模型 {round_number}] tool_calls={tool_call_count} usage={usage}",
+                "cyan",
+            )
+        )
 
     def record_run(self, result: RunResult) -> None:
         status = terminal_safe_text(self.redactor.redact(result.status))
         usage = "available" if result.provider_total_tokens is not None else "unavailable"
-        self._emit(f"[结束] stop_reason={status} usage={usage}")
+        style = "green" if result.status == "COMPLETED" else "yellow"
+        self._emit(colorize(f"[结束] stop_reason={status} usage={usage}", style))
 
     def _summary_value(self, value: object, key: str | None = None) -> object:
         if key in {"content", "old_text", "new_text"}:
@@ -132,13 +139,18 @@ class TerminalTrace:
         tool_result = result
         clean_name = terminal_safe_text(self.redactor.redact(name))
         argument_summary = terminal_safe_text(self._argument_summary(raw))
-        self._emit(f"[工具] {clean_name} 参数={argument_summary}")
+        self._emit(colorize(f"[工具] {clean_name} 参数={argument_summary}", "cyan"))
         code = (
             "-"
             if tool_result.error_code is None
             else terminal_safe_text(self.redactor.redact(tool_result.error_code))
         )
-        self._emit(f"[结果] {clean_name} ok={'true' if tool_result.ok else 'false'} error_code={code}")
+        self._emit(
+            colorize(
+                f"[结果] {clean_name} ok={'true' if tool_result.ok else 'false'} error_code={code}",
+                "green" if tool_result.ok else "red",
+            )
+        )
         if name in {"write_file", "edit_file"}:
             if not tool_result.ok:
                 return
@@ -147,14 +159,28 @@ class TerminalTrace:
                 safe_diff = terminal_safe_text(
                     self.redactor.redact(diff), multiline=True
                 )
-                self._emit(_truncate(safe_diff, MAX_TRACE_DETAIL_CHARS))
+                truncated = _truncate(safe_diff, MAX_TRACE_DETAIL_CHARS)
+                colored_lines = []
+                for line in truncated.split(chr(10)):
+                    if line.startswith("+"):
+                        colored_lines.append(colorize(line, "green"))
+                    elif line.startswith("-"):
+                        colored_lines.append(colorize(line, "red"))
+                    else:
+                        colored_lines.append(line)
+                self._emit(chr(10).join(colored_lines))
         elif name == "run_command":
             details = tool_result.details if isinstance(tool_result.details, Mapping) else {}
             exit_code = details.get("exit_code")
             exit_text = str(exit_code) if isinstance(exit_code, int) and not isinstance(exit_code, bool) else "-"
             timeout = details.get("timed_out")
             timeout_text = "true" if timeout is True else "false" if timeout is False else "-"
-            self._emit(f"[命令] exit_code={exit_text} timed_out={timeout_text}")
+            self._emit(
+                colorize(
+                    f"[命令] exit_code={exit_text} timed_out={timeout_text}",
+                    "green" if exit_code == 0 else "red",
+                )
+            )
             for field in ("stdout", "stderr"):
                 value = details.get(field)
                 self._emit(f"  {field}:")
