@@ -1,0 +1,1 @@
+为日志级别增加兼容的规范化能力：在 `levels.py` 新增 `normalize_level(value: str) -> str`，去除首尾空白、转为小写并验证支持的级别；非字符串抛出 `TypeError`，未知或空级别抛出 `ValueError`。在 `events.py` 中复用该函数，使 `format_event` 接受例如 `" Warning "` 的输入，同时保持原有函数签名、默认行为和输出格式。只允许修改 `levels.py`、`events.py`，并运行现有测试；不要新增依赖或修改测试。
