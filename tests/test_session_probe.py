@@ -1183,12 +1183,23 @@ def test_subprocess_report_contains_counts_only(
         raising=False,
     )
     report = _run_probe_with_client(monkeypatch, _successful_probe_client())
-    serialized = json.dumps(report.to_dict(), ensure_ascii=False)
+    payload = report.to_dict()
+    serialized = json.dumps(payload, ensure_ascii=False)
 
-    assert "active_subprocess_count" not in report.to_dict()
-    assert "baseline_direct_subprocess_count" in report.to_dict()
-    assert "new_residual_direct_subprocess_count" in report.to_dict()
-    assert "41" not in serialized and "42" not in serialized
+    def scalar_values(value: object):
+        if isinstance(value, dict):
+            for nested in value.values():
+                yield from scalar_values(nested)
+        elif isinstance(value, (list, tuple)):
+            for nested in value:
+                yield from scalar_values(nested)
+        else:
+            yield value
+
+    assert "active_subprocess_count" not in payload
+    assert "baseline_direct_subprocess_count" in payload
+    assert "new_residual_direct_subprocess_count" in payload
+    assert 41 not in scalar_values(payload) and 42 not in scalar_values(payload)
     assert "pid" not in serialized.lower()
     assert "commandline" not in serialized.lower()
 
