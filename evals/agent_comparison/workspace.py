@@ -168,6 +168,9 @@ def create_run_workspace(task_id: str, destination: Path) -> RunWorkspace:
         root.mkdir(parents=True, exist_ok=False)
     _assert_safe_parents(root)
     _assert_safe_tree(root)
+    # CI 的 TEMP 可能是 8.3 短路径（RUNNER~1）或别名盘；父路径已验证无链接，
+    # resolve 仅做规范化，保证 root 与子进程/测试侧的真实路径一致。
+    root = root.resolve()
 
     files = _visible_files(task_id)
     copied: list[tuple[str, bytes]] = []
