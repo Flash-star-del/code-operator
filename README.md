@@ -66,6 +66,26 @@ code-operator> /exit
 
 ## 架构
 
+### 核心执行循环
+
+Agent 的闭环由「模型响应 → 工具执行 → 结果回传 → 继续推理」构成，工具调用按 ID 严格配对，多重终止条件保证循环有界：
+
+```mermaid
+flowchart TD
+    START["用户任务"] --> BUILD["组装消息历史<br/>系统提示词 + AGENT.md 注入"]
+    BUILD --> TRIM["上下文裁剪<br/>按完整工具回合，不拆 call/result 配对"]
+    TRIM --> CALL["调用模型<br/>OpenAI 兼容 chat-completions"]
+    CALL --> HAS{"响应包含<br/>工具调用？"}
+    HAS -- "否" --> DONE(["输出最终回答<br/>COMPLETED"])
+    HAS -- "是" --> EXEC["顺序执行工具调用<br/>路径约束 · 命令人工审批 · 凭据脱敏"]
+    EXEC --> PAIR["结果按原工具调用 ID<br/>一一配对回传"]
+    PAIR --> TERM{"终止条件？<br/>轮次 / 调用数 / 连续失败<br/>重复调用 / 上下文上限 / 用户中止"}
+    TERM -- "未触发" --> TRIM
+    TERM -- "触发" --> STOP(["以对应终态退出"])
+```
+
+### 模块清单
+
 ```
 __main__.py   CLI：参数解析、交互循环、本地命令分发、审批交互
 session.py    AgentSession：组装工具/客户端/审计/撤销/AGENT.md 注入
@@ -98,6 +118,35 @@ CLI 以普通纯文本输出模型轮次、工具名、脱敏后的有界参数�
 - **真实任务验收**（2026-08-28，kimi-k3）：隔离 buggy Python 项目，初始独立测试 2 失败 1 通过，agent 只修改生产文件，最终独立复跑 3 通过；6 轮、6 次工具调用，供应商报告 10,890 tokens；审计中未出现当前 API Key 或 Bearer。证据：[`docs/evidence/m4-real-task.json`](docs/evidence/m4-real-task.json)。
 - **黄金 Eval**（2026-08-29，kimi-k3）：冻结订单价格流水线任务经 `python -m evals.run_golden --report <NEW_REPORT.json>` 在三个全新临时工作区运行，三次全部成功；测试文件哈希未变，变更路径仅为生产文件。证据：[`docs/evidence/e2-golden-eval.json`](docs/evidence/e2-golden-eval.json)（另保留修复评测器环境净化问题前的报告以供审查）。
 - **双系统横评**：与 Kimi Code 的对比记录见 [`docs/agent-comparison-results.md`](docs/agent-comparison-results.md)（五个合成任务、单次运行、独立隐藏测试评分，仅代表该样本）。
+
+### 真实任务执行轨迹
+
+下图按 [`docs/evidence/m4-real-task.json`](docs/evidence/m4-real-task.json) 记录的 6 轮 6 次工具调用绘制（每轮一次调用，轮次 2、3 均为 `read_file`，图中合并展示）：
+
+```mermaid
+sequenceDiagram
+    autonumber
+    participant M as 模型 kimi-k3
+    participant A as AgentLoop
+    participant T as 工具执行（策略约束）
+    Note over M,T: 初始独立测试：python -m pytest -q → 2 failed, 1 passed
+    M->>A: 轮次 1：list_dir
+    A->>T: 执行 list_dir
+    T-->>M: 目录清单
+    M->>A: 轮次 2–3：read_file ×2
+    A->>T: 读取生产文件与测试文件
+    T-->>M: 文件内容
+    M->>A: 轮次 4：run_command
+    A->>T: python -m pytest -q
+    T-->>M: exit 1（COMMAND_FAILED，2 failed）
+    M->>A: 轮次 5：edit_file
+    A->>T: 修改生产文件（展示 diff）
+    T-->>M: 编辑成功
+    M->>A: 轮次 6：run_command
+    A->>T: python -m pytest -q
+    T-->>M: exit 0（3 passed）
+    Note over M,A: COMPLETED · 6 轮 · 6 次工具调用 · 供应商报告 10,890 tokens
+```
 
 以上结果均只描述对应样本，不泛化为整体成功率。本地 token 估算是粗估，不是供应商 tokenizer 上界。
 
